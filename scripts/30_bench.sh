@@ -14,12 +14,24 @@ BENCH_BIN="$LLAMA_CPP_DIR/build/bin/llama-bench"
 [ -f "$GGUF" ] || { echo "ERROR: $GGUF not found" >&2; exit 1; }
 [ -x "$BENCH_BIN" ] || { echo "ERROR: $BENCH_BIN not found" >&2; exit 1; }
 
+# Token-generation count for the tg measurement. Default: 128 tokens at any ctx
+# matches Kurt 2026 Table 3. For ctx=2048 we extend to 256 to get steady-state
+# decode (the first 128 tokens at long ctx are dominated by KV-warmup tail).
+# Override with N_GEN env var if needed.
+if [ -n "${N_GEN:-}" ]; then
+  TG_N="$N_GEN"
+elif [ "$CTX" -ge 2048 ]; then
+  TG_N=256
+else
+  TG_N=128
+fi
+
 mkdir -p "$OUT_DIR/bench_raw"
 
 # Run llama-bench REPEATS times. Each invocation does one pp + one tg sample (with -r 1).
 for i in $(seq 1 "$REPEATS"); do
   raw="$OUT_DIR/bench_raw/run-$i.json"
-  "$BENCH_BIN" -m "$GGUF" -p "$CTX" -n 128 -r 1 -o json > "$raw"
+  "$BENCH_BIN" -m "$GGUF" -p "$CTX" -n "$TG_N" -r 1 -o json > "$raw"
 done
 
 # Concatenate all rows from each run into a single array, then aggregate.

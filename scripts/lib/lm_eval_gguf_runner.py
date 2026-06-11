@@ -173,11 +173,63 @@ class GGUFLocal(LM):
         return out
 
     def loglikelihood_rolling(self, requests, disable_tqdm: bool = False) -> list[float]:
-        # Used by perplexity-style tasks (wikitext). Scores the full string under
-        # an empty context. Not exercised by the smoke set; implement when needed.
-        raise NotImplementedError(
-            "gguf_local: loglikelihood_rolling not implemented yet (needed for wikitext PPL)"
-        )
+        """Compute total log-likelihood of a long string with no separate context.
+
+        Used by perplexity-style tasks (wikitext). lm-eval expects, per request, the
+        sum of log-probabilities of the full token sequence under the model. Strategy:
+        slide a context-size window with stride n_ctx//2; for each window, score every
+        token whose position is past the previous window's last *kept* index. This is
+        the standard "halve the context, keep the second half's logprobs" trick used
+        by HuggingFace's perplexity recipe.
+        """
+        try:
+            from tqdm import tqdm  # type: ignore
+        except ImportError:  # pragma: no cover
+            tqdm = lambda x, **k: x  # noqa: E731
+
+        out: list[float] = []
+        # Cap window at max_length-1 so we always have a row of logits to score against.
+        win = max(2, self._max_length - 1)
+        stride = max(1, win // 2)
+
+        iterator = requests if disable_tqdm else tqdm(requests, desc="loglikelihood_rolling (gguf_local)")
+        for req in iterator:
+            string = req.args[0]
+            tokens = self._llm.tokenize(string.encode("utf-8"), add_bos=True, special=False)
+            n = len(tokens)
+            if n < 2:
+                out.append(0.0)
+                continue
+
+            total_lp = 0.0
+            scored_until = 0  # index after which we still need to score tokens
+            start = 0
+            while start < n - 1:
+                end = min(start + win, n)
+                chunk = tokens[start:end]
+                self._llm.reset()
+                self._llm.eval(chunk)
+                scores = self._llm.scores[: len(chunk)]
+                # Within this window, token at local position i was predicted by
+                # logits at local row i-1. We must score token absolute positions
+                # max(start+1, scored_until) up through end-1, but skip the first
+                # one if start == 0 (no logit predicts the very first token).
+                first_abs = max(start + 1, scored_until)
+                for abs_pos in range(first_abs, end):
+                    local_i = abs_pos - start
+                    row = local_i - 1
+                    if row < 0 or row >= scores.shape[0]:
+                        continue
+                    logits = scores[row]
+                    mx = float(np.max(logits))
+                    lse = mx + math.log(float(np.sum(np.exp(logits - mx))))
+                    total_lp += float(logits[tokens[abs_pos]]) - lse
+                scored_until = end
+                if end >= n:
+                    break
+                start += stride
+            out.append(total_lp)
+        return out
 
     # ---- generation (GSM8K, IFEval) -----------------------------------------
 

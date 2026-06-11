@@ -2,6 +2,14 @@
 # Orchestrate one (model, quant, ctx) slot end-to-end.
 # Usage: run_slot.sh <hf-id> <SCHEME> <ctx> [<repeats>] [<task1,task2,...>]
 #   e.g. run_slot.sh Qwen/Qwen3-0.6B Q4_K_S 512 3 hellaswag
+#
+# Special schemes: F16 / FP16 — uses the unquantized FP16 GGUF as-is, no quantize step.
+#
+# Env vars:
+#   PERF_ONLY=1      — run only env-capture + bench, skip lm_eval. Used for the
+#                      ctx=2048 perf sweep where accuracy is identical to ctx=512.
+#   LM_EVAL_LIMIT=N  — pass through to 40_lm_eval.sh.
+#   LLAMA_CPP_DIR    — path to llama.cpp checkout (default ../llama.cpp).
 set -euo pipefail
 
 HF_ID="${1:?Usage: $0 <hf-id> <SCHEME> <ctx> [<repeats>] [<task1,task2,...>]}"
@@ -12,6 +20,7 @@ TASKS_CSV="${5:-hellaswag}"
 
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-../llama.cpp}"
 export LLAMA_CPP_DIR
+PERF_ONLY="${PERF_ONLY:-0}"
 
 # 1. Ensure env captured.
 if [ ! -f env/host.json ] || [ ! -f env/llama_cpp.json ] || [ ! -f env/lm_eval.json ]; then
@@ -32,13 +41,37 @@ SAFE_NAME=$(echo "$HF_ID" | tr '/' '_' | tr -d "'\"" | tr '[:upper:]' '[:lower:]
 FP16_GGUF="models/${SAFE_NAME}-fp16.gguf"
 FP16_SHA=$(awk '{print $1}' "${FP16_GGUF}.sha256")
 
-# 3. Quantize.
-echo "==> quantize"
-./scripts/20_quantize.sh "$FP16_GGUF" "$SCHEME"
+# 3. Quantize (or pass-through for FP16).
+scheme_upper=$(echo "$SCHEME" | tr '[:lower:]' '[:upper:]')
 scheme_lower=$(echo "$SCHEME" | tr '[:upper:]' '[:lower:]')
-QUANT_GGUF="quantized/${SAFE_NAME}-${scheme_lower}.gguf"
-QUANT_SHA=$(awk '{print $1}' "${QUANT_GGUF}.sha256")
-QUANT_META="${QUANT_GGUF}.quant.json"
+
+if [ "$scheme_upper" = "F16" ] || [ "$scheme_upper" = "FP16" ]; then
+  echo "==> FP16 baseline (no quantization)"
+  QUANT_GGUF="$FP16_GGUF"
+  QUANT_SHA="$FP16_SHA"
+  # Synthesise a quant.json on the fly with zero quant time / no reduction.
+  size_mib=$(python3 -c "import os, sys; print(round(os.path.getsize(sys.argv[1]) / (1024*1024), 2))" "$FP16_GGUF")
+  QUANT_META=$(mktemp /tmp/quant_meta.fp16.XXXXXX.json)
+  python3 - "$FP16_GGUF" "$size_mib" <<'PY' > "$QUANT_META"
+import json, sys
+gguf, size_mib = sys.argv[1], float(sys.argv[2])
+print(json.dumps({
+  "scheme": "F16",
+  "input_gguf": gguf,
+  "input_size_mib": size_mib,
+  "output_size_mib": size_mib,
+  "size_reduction_pct": 0.0,
+  "quant_time_s": 0,
+}, indent=2))
+PY
+  trap 'rm -f "$QUANT_META"' EXIT
+else
+  echo "==> quantize"
+  ./scripts/20_quantize.sh "$FP16_GGUF" "$SCHEME"
+  QUANT_GGUF="quantized/${SAFE_NAME}-${scheme_lower}.gguf"
+  QUANT_SHA=$(awk '{print $1}' "${QUANT_GGUF}.sha256")
+  QUANT_META="${QUANT_GGUF}.quant.json"
+fi
 
 # 4. Build run-id and slot directory.
 TS=$(date -u +%Y-%m-%dT%H-%M-%SZ)
@@ -79,12 +112,13 @@ PY
 echo "==> bench"
 ./scripts/30_bench.sh "$QUANT_GGUF" "$CTX" "$SLOT_DIR" "$REPEATS"
 
-# 7. lm-eval each task.
-IFS=',' read -ra TASKS <<< "$TASKS_CSV"
-for t in "${TASKS[@]}"; do
-  echo "==> lm_eval $t"
-  ./scripts/40_lm_eval.sh "$QUANT_GGUF" "$t" "$SLOT_DIR"
-done
+# 7. lm-eval — single process, all tasks at once. Skip entirely if PERF_ONLY.
+if [ "$PERF_ONLY" = "1" ]; then
+  echo "==> PERF_ONLY=1 — skipping lm_eval"
+else
+  echo "==> lm_eval (tasks: $TASKS_CSV)"
+  ./scripts/40_lm_eval.sh "$QUANT_GGUF" "$TASKS_CSV" "$SLOT_DIR"
+fi
 
 # 8. Aggregate.
 echo "==> aggregate"

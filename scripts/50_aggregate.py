@@ -28,7 +28,10 @@ _BITS_RE = re.compile(r"Q(\d)")
 
 
 def nominal_bits(scheme: str) -> int:
-    m = _BITS_RE.match(scheme.upper())
+    s = scheme.upper()
+    if s in ("F16", "FP16"):
+        return 16
+    m = _BITS_RE.match(s)
     if not m:
         raise ValueError(f"cannot parse bits from scheme: {scheme}")
     return int(m.group(1))

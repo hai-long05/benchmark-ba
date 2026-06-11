@@ -13,6 +13,14 @@ QUANT_BIN="$LLAMA_CPP_DIR/build/bin/llama-quantize"
 [ -f "$IN_GGUF" ] || { echo "ERROR: $IN_GGUF not found" >&2; exit 1; }
 [ -x "$QUANT_BIN" ] || { echo "ERROR: $QUANT_BIN not found — build llama.cpp" >&2; exit 1; }
 
+# F16 / FP16 is the unquantized baseline — caller (run_slot.sh) handles it
+# directly without invoking this script. Fail loudly if it's passed here.
+scheme_upper=$(echo "$SCHEME" | tr '[:lower:]' '[:upper:]')
+if [ "$scheme_upper" = "F16" ] || [ "$scheme_upper" = "FP16" ]; then
+  echo "ERROR: 20_quantize.sh does not handle F16/FP16; run_slot.sh routes that scheme directly" >&2
+  exit 1
+fi
+
 # Pick a sha256 tool that exists.
 if command -v sha256sum >/dev/null 2>&1; then
   SHA_CMD="sha256sum"

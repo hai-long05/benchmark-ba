@@ -64,6 +64,9 @@ def test_bits_nominal_mapping():
     assert mod.nominal_bits("Q5_1") == 5
     assert mod.nominal_bits("Q6_K") == 6
     assert mod.nominal_bits("Q8_0") == 8
+    assert mod.nominal_bits("F16") == 16
+    assert mod.nominal_bits("FP16") == 16
+    assert mod.nominal_bits("f16") == 16
 
 
 def _load_agg_module():
