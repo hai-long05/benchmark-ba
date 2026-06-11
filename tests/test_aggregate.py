@@ -1,4 +1,5 @@
 """Tests for scripts/50_aggregate.py — merge slot/bench/lm_eval into results.json."""
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -63,3 +64,54 @@ def test_bits_nominal_mapping():
     assert mod.nominal_bits("Q5_1") == 5
     assert mod.nominal_bits("Q6_K") == 6
     assert mod.nominal_bits("Q8_0") == 8
+
+
+def _load_agg_module():
+    spec = importlib.util.spec_from_file_location("aggregate", AGG)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_extract_metrics_gsm8k_filter_collision(tmp_path):
+    """GSM8K emits both strict-match and flexible-extract; both must survive."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    mod = _load_agg_module()
+
+    fake = tmp_path / "gsm8k.json"
+    fake.write_text(json.dumps({
+        "results": {
+            "gsm8k": {
+                "alias": "gsm8k",
+                "exact_match,strict-match": 0.42,
+                "exact_match_stderr,strict-match": 0.013,
+                "exact_match,flexible-extract": 0.51,
+                "exact_match_stderr,flexible-extract": 0.014,
+            }
+        }
+    }))
+    out = mod._extract_task_metrics(fake)
+    assert out["gsm8k"]["exact_match_strict_match"] == 0.42
+    assert out["gsm8k"]["exact_match_flexible_extract"] == 0.51
+    assert out["gsm8k"]["exact_match_stderr_strict_match"] == 0.013
+    assert out["gsm8k"]["exact_match_stderr_flexible_extract"] == 0.014
+
+
+def test_extract_metrics_none_filter_stripped(tmp_path):
+    """The trivial ',none' filter is stripped (preserves existing test compatibility)."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    mod = _load_agg_module()
+
+    fake = tmp_path / "hellaswag.json"
+    fake.write_text(json.dumps({
+        "results": {
+            "hellaswag": {
+                "alias": "hellaswag",
+                "acc_norm,none": 0.7187,
+                "acc_norm_stderr,none": 0.0045,
+            }
+        }
+    }))
+    out = mod._extract_task_metrics(fake)
+    assert out["hellaswag"]["acc_norm"] == 0.7187
+    assert out["hellaswag"]["acc_norm_stderr"] == 0.0045

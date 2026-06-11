@@ -47,7 +47,13 @@ def _current_env_hash() -> str:
 
 
 def _extract_task_metrics(lm_eval_path: Path) -> dict[str, Any]:
-    """Pull primary metric + stderr out of an lm-eval results.json into a flat dict."""
+    """Pull metrics out of an lm-eval results.json into a flat dict.
+
+    lm-eval keys are of the form "<metric>,<filter>". The trivial filter ",none"
+    carries no information and is stripped. Non-trivial filters (e.g. ",strict-match"
+    and ",flexible-extract" on GSM8K) are preserved with an underscore separator
+    so the two scores do not collide on the same metric name.
+    """
     data = json.loads(lm_eval_path.read_text())
     results = data.get("results", {})
     flat: dict[str, dict[str, float]] = {}
@@ -56,8 +62,11 @@ def _extract_task_metrics(lm_eval_path: Path) -> dict[str, Any]:
         for key, value in metrics.items():
             if key == "alias" or not isinstance(value, (int, float)):
                 continue
-            # Normalize "metric,filter" -> "metric"
-            base = key.split(",")[0]
+            if "," in key:
+                metric, _, filter_name = key.partition(",")
+                base = metric if filter_name == "none" else f"{metric}_{filter_name.replace('-', '_')}"
+            else:
+                base = key
             entry[base] = float(value)
         flat[task_name] = entry
     return flat
