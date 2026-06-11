@@ -5,11 +5,6 @@ set -euo pipefail
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-../llama.cpp}"
 LM_EVAL_REQUIRED="0.4.9.2"
 
-# Helper: JSON-escape a string for embedding inside double quotes.
-json_escape() {
-  python3 -c 'import json,sys;print(json.dumps(sys.stdin.read().rstrip("\n"))[1:-1])'
-}
-
 mkdir -p env
 
 # Collect host data once. lscpu is invoked at most once.
@@ -48,7 +43,7 @@ python3 - "$cpu_model" "$cpu_cores" "$flags" "$governor" "$ram_total_mib" "$unam
 import json, sys, datetime
 cpu_model, cpu_cores, flags, governor, ram_total_mib, uname_str, platform = sys.argv[1:8]
 obj = {
-    "captured_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "captured_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "uname": uname_str,
     "cpu_model": cpu_model,
     "cpu_cores": int(cpu_cores) if cpu_cores.isdigit() else 0,
