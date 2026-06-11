@@ -1,0 +1,26 @@
+# lm-eval-harness v0.4.9.2 task IDs, versions, shots — pinned per Kurt (2026) and exposé §4.4.
+tasks:
+  hellaswag:
+    task_id: hellaswag
+    num_fewshot: 0
+    primary_metric: acc_norm
+  gsm8k:
+    task_id: gsm8k
+    num_fewshot: 5
+    primary_metric: exact_match,flexible-extract
+  ifeval:
+    task_id: ifeval
+    num_fewshot: 0
+    primary_metric: prompt_level_strict_acc   # one of four; aggregator records all four
+  mmlu:
+    task_id: mmlu
+    num_fewshot: 0
+    primary_metric: acc
+  truthfulqa_mc2:
+    task_id: truthfulqa_mc2
+    num_fewshot: 0
+    primary_metric: acc
+  wikitext:
+    task_id: wikitext
+    num_fewshot: 0
+    primary_metric: word_perplexity
