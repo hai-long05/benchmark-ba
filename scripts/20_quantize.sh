@@ -30,16 +30,17 @@ OUT_GGUF="quantized/${base}-${scheme_lower}.gguf"
 OUT_SHA="${OUT_GGUF}.sha256"
 OUT_META="${OUT_GGUF}.quant.json"
 
-# Idempotency
-if [ -f "$OUT_GGUF" ] && [ -f "$OUT_SHA" ]; then
+# Idempotency: require all three artefacts (gguf + sha + meta) to be present and matching.
+if [ -f "$OUT_GGUF" ] && [ -f "$OUT_SHA" ] && [ -f "$OUT_META" ]; then
   expected=$(awk '{print $1}' "$OUT_SHA")
   actual=$($SHA_CMD "$OUT_GGUF" | awk '{print $1}')
   if [ "$expected" = "$actual" ]; then
     echo "quantized already present and verified: $OUT_GGUF"
     exit 0
   fi
-  rm -f "$OUT_GGUF" "$OUT_SHA" "$OUT_META"
 fi
+# Stale or partial — clear and re-run.
+rm -f "$OUT_GGUF" "$OUT_SHA" "$OUT_META"
 
 # Run + time it
 start=$(date +%s)
@@ -68,4 +69,5 @@ print(json.dumps({
 }, indent=2))
 PY
 
-echo "quantized: $OUT_GGUF ($size_mib MiB, $(awk -F'"' '/size_reduction_pct/ {print $0}' $OUT_META | tr -dc '0-9.-')% reduction, ${quant_time_s}s)"
+reduction_pct=$(python3 -c "import sys; out, inp = float(sys.argv[1]), float(sys.argv[2]); print(round((1.0 - out/inp) * 100, 2) if inp else 0.0)" "$size_mib" "$in_size_mib")
+echo "quantized: $OUT_GGUF (${size_mib} MiB, ${reduction_pct}% reduction, ${quant_time_s}s)"
