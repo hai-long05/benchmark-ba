@@ -7,18 +7,28 @@ set -euo pipefail
 
 HF_ID="${1:?Usage: $0 <hf-id>}"
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-../llama.cpp}"
-SAFE_NAME=$(echo "$HF_ID" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
+SAFE_NAME=$(echo "$HF_ID" | tr '/' '_' | tr -d "'\"" | tr '[:upper:]' '[:lower:]')
 OUT_GGUF="models/${SAFE_NAME}-fp16.gguf"
 OUT_SHA="${OUT_GGUF}.sha256"
 OUT_META="${OUT_GGUF}.meta.json"
 DL_DIR="models/_hf/${SAFE_NAME}"
+
+# Pick a sha256 tool that exists.
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA_CMD="sha256sum"
+elif command -v shasum >/dev/null 2>&1; then
+  SHA_CMD="shasum -a 256"
+else
+  echo "ERROR: no sha256sum or shasum found" >&2
+  exit 1
+fi
 
 mkdir -p models models/_hf
 
 # Idempotency: if the GGUF + sha exist and match, exit 0.
 if [ -f "$OUT_GGUF" ] && [ -f "$OUT_SHA" ]; then
   expected=$(awk '{print $1}' "$OUT_SHA")
-  actual=$(shasum -a 256 "$OUT_GGUF" | awk '{print $1}')
+  actual=$($SHA_CMD "$OUT_GGUF" | awk '{print $1}')
   if [ "$expected" = "$actual" ]; then
     echo "model already present and verified: $OUT_GGUF"
     exit 0
@@ -26,15 +36,17 @@ if [ -f "$OUT_GGUF" ] && [ -f "$OUT_SHA" ]; then
   echo "WARN: SHA mismatch on $OUT_GGUF, re-downloading" >&2
 fi
 
-# Download (snapshot pins to a specific revision via --revision once we know it; default = main, recorded below).
+# Download. The deprecated --local-dir-use-symlinks flag is dropped (default behavior is correct in current huggingface_hub).
 echo "downloading $HF_ID -> $DL_DIR"
-huggingface-cli download "$HF_ID" --local-dir "$DL_DIR" --local-dir-use-symlinks False
-revision=$(cat "$DL_DIR/.cache/huggingface/download/.last_commit" 2>/dev/null \
-  || git -C "$DL_DIR" rev-parse HEAD 2>/dev/null \
-  || echo "UNKNOWN")
+huggingface-cli download "$HF_ID" --local-dir "$DL_DIR"
+
+# Capture the revision. huggingface_hub writes per-file .metadata files whose first line is the commit hash.
+revision=$(awk 'FNR==1 && /^[0-9a-f]{40}$/ {print; exit}' \
+  "$DL_DIR/.cache/huggingface/download/"*.metadata 2>/dev/null || echo "")
+[ -n "$revision" ] || revision="UNKNOWN"
 
 # Convert to FP16 GGUF if the repo doesn't already ship one.
-existing_gguf=$(find "$DL_DIR" -maxdepth 2 -type f -name '*fp16*.gguf' -o -name '*f16*.gguf' 2>/dev/null | head -1)
+existing_gguf=$(find "$DL_DIR" -maxdepth 2 -type f \( -name '*fp16*.gguf' -o -name '*f16*.gguf' \) 2>/dev/null | head -1)
 if [ -n "${existing_gguf:-}" ]; then
   echo "found pre-built GGUF in repo: $existing_gguf"
   cp "$existing_gguf" "$OUT_GGUF"
@@ -45,24 +57,32 @@ else
     exit 1
   fi
   echo "converting safetensors -> FP16 GGUF"
-  python "$CONVERT" "$DL_DIR" --outfile "$OUT_GGUF" --outtype f16
+  python3 "$CONVERT" "$DL_DIR" --outfile "$OUT_GGUF" --outtype f16
 fi
 
-# Hash + metadata
-shasum -a 256 "$OUT_GGUF" > "$OUT_SHA"
-size_mib=$(python -c "import os; print(round(os.path.getsize('$OUT_GGUF') / (1024*1024), 2))")
+# Hash + size
+$SHA_CMD "$OUT_GGUF" > "$OUT_SHA"
+size_mib=$(python3 -c "import os, sys; print(round(os.path.getsize(sys.argv[1]) / (1024*1024), 2))" "$OUT_GGUF")
 
 # License: try to find LICENSE/LICENSE.* in download.
-license=$(find "$DL_DIR" -maxdepth 2 -iname 'LICENSE*' -type f | head -1 | xargs -I{} basename {} 2>/dev/null || echo "unknown")
+license=$(find "$DL_DIR" -maxdepth 2 -iname 'LICENSE*' -type f 2>/dev/null | head -1)
+if [ -n "$license" ]; then
+  license=$(basename "$license")
+else
+  license="unknown"
+fi
 
-cat > "$OUT_META" <<EOF
-{
-  "hf_id": "$HF_ID",
-  "revision": "$revision",
-  "license_file": "$license",
-  "size_mib": $size_mib,
-  "safe_name": "$SAFE_NAME"
-}
-EOF
+# Write meta.json via Python so escaping is safe.
+python3 - "$HF_ID" "$revision" "$license" "$size_mib" "$SAFE_NAME" <<'PY' > "$OUT_META"
+import json, sys
+hf_id, revision, license_file, size_mib, safe_name = sys.argv[1:6]
+print(json.dumps({
+  "hf_id": hf_id,
+  "revision": revision,
+  "license_file": license_file,
+  "size_mib": float(size_mib),
+  "safe_name": safe_name,
+}, indent=2))
+PY
 
 echo "fetched: $OUT_GGUF ($size_mib MiB)"
