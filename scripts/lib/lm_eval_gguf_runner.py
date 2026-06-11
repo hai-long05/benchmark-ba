@@ -179,11 +179,70 @@ class GGUFLocal(LM):
             "gguf_local: loglikelihood_rolling not implemented yet (needed for wikitext PPL)"
         )
 
-    def generate_until(self, requests, disable_tqdm: bool = False) -> list[str]:
-        # Used by GSM8K / IFEval. Not exercised by the smoke; implement when needed.
-        raise NotImplementedError(
-            "gguf_local: generate_until not implemented yet (needed for gsm8k, ifeval)"
+    # ---- generation (GSM8K, IFEval) -----------------------------------------
+
+    def _generate_one(
+        self,
+        context: str,
+        until: list[str],
+        max_new_tokens: int,
+    ) -> str:
+        """Greedy-generate from `context` until any of `until` appears in the suffix
+        or `max_new_tokens` is reached.
+
+        Uses llama-cpp-python's create_completion in non-streaming mode with
+        temperature=0 (greedy) so output is deterministic. The `stop` parameter
+        of llama-cpp-python is honoured server-side, but we also defensively
+        truncate the result on each `until` token after the fact in case the
+        model emitted a stop string mid-token (rare but possible with BPE).
+        """
+        # llama-cpp-python's `stop` accepts a list of strings; pass the same list.
+        # Empty stops list is fine.
+        out = self._llm.create_completion(
+            prompt=context,
+            max_tokens=max_new_tokens,
+            temperature=0.0,
+            top_k=1,
+            top_p=1.0,
+            min_p=0.0,
+            repeat_penalty=1.0,
+            stop=list(until) if until else [],
+            echo=False,
+            stream=False,
         )
+        text = out["choices"][0]["text"]
+        # Defensive: truncate at the earliest occurrence of any until-string.
+        for u in until:
+            if u and u in text:
+                text = text.split(u, 1)[0]
+        return text
+
+    def generate_until(self, requests, disable_tqdm: bool = False) -> list[str]:
+        """Generate completions for each request.
+
+        Each lm_eval Instance.args is (context, gen_kwargs_dict). gen_kwargs
+        carries `until` (list of stop strings), `do_sample`, `temperature`,
+        `max_gen_toks`, etc. We honour `until` and `max_gen_toks` and force
+        greedy decoding (temperature=0) per the project's spec §4.4.
+        """
+        try:
+            from tqdm import tqdm  # type: ignore
+        except ImportError:  # pragma: no cover
+            tqdm = lambda x, **k: x  # noqa: E731
+
+        out: list[str] = []
+        iterator = requests if disable_tqdm else tqdm(requests, desc="generate_until (gguf_local)")
+        for req in iterator:
+            args = req.args
+            context = args[0]
+            gen_kwargs = args[1] if len(args) > 1 and isinstance(args[1], dict) else {}
+            until = gen_kwargs.get("until", []) or []
+            if isinstance(until, str):
+                until = [until]
+            max_new = int(gen_kwargs.get("max_gen_toks", self.max_gen_toks))
+            text = self._generate_one(context, list(until), max_new)
+            out.append(text)
+        return out
 
     def apply_chat_template(self, chat_history, add_generation_prompt: bool = True) -> str:  # type: ignore[override]
         # HellaSwag and other loglikelihood tasks do not invoke this; raw text scoring is correct.
