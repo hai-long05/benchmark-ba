@@ -7,7 +7,7 @@ tasks:
   gsm8k:
     task_id: gsm8k
     num_fewshot: 5
-    primary_metric: exact_match,flexible-extract
+    primary_metric: exact_match   # from filter "flexible-extract" per Kurt; aggregator stores keys with the ",filter" suffix stripped
   ifeval:
     task_id: ifeval
     num_fewshot: 0
