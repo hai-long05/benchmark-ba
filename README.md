@@ -17,5 +17,5 @@ Expected wall-clock: < 30 min.
 ## Dependencies
 
 - `llama.cpp` checkout: scripts read `$LLAMA_CPP_DIR` (default `../llama.cpp`).
-  Build with `cmake -B build -DGGML_METAL=OFF -DGGML_BLAS=OFF && cmake --build build -j`.
+  Build with: `cmake -S ../llama.cpp -B ../llama.cpp/build -DGGML_METAL=OFF -DGGML_BLAS=OFF -DLLAMA_CURL=OFF && cmake --build ../llama.cpp/build --config Release -j`.
 - Python 3.11+: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`.
