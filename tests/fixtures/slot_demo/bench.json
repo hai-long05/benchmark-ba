@@ -1,0 +1,5 @@
+{
+  "pp": {"ctx": 512, "median": 93.0, "iqr": 1.0, "samples": [92.0, 93.0, 94.0]},
+  "tg": {"median": 4.6, "iqr": 0.1, "samples": [4.5, 4.6, 4.7]},
+  "warnings": []
+}

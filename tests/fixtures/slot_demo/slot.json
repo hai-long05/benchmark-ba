@@ -1,0 +1,20 @@
+{
+  "run_id": "fixture-2026-06-11T00-00-00Z-qwen3-0.6b-q4_k_s-ctx512",
+  "model": {
+    "name": "Qwen3-0.6B",
+    "hf_id": "Qwen/Qwen3-0.6B",
+    "fp16_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "quant": {
+    "scheme": "Q4_K_S",
+    "gguf_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "size_mib": 412.3,
+    "size_reduction_pct": 65.4,
+    "quant_time_s": 4.1
+  },
+  "ctx": 512,
+  "repeats": 3,
+  "host_id": "EXPECTED_HOST_ID",
+  "llama_cpp_commit": "abc1234",
+  "lm_eval_version": "0.4.9.2"
+}
