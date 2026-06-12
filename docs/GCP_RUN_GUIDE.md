@@ -132,6 +132,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+
+# IFEval needs nltk's 'punkt' corpora at runtime (one-time download, ~3 MB)
+python3 -c "import nltk; nltk.download('punkt_tab', quiet=True); nltk.download('punkt', quiet=True)"
 ```
 
 ### 3.5 Hugging Face auth (paste the token from §1.1)
