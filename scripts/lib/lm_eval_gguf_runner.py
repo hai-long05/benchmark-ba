@@ -8,7 +8,10 @@ to ~0.40 on Llama-3.1-8B-Q4_K_S.
 
 This adapter loads the GGUF in-process and computes exact per-token logprobs
 from the full softmax — the same scoring path lm_eval's `hf` backend uses for
-non-GGUF models. Result: correct numbers, ~10x faster, no HTTP, no proxy.
+non-GGUF models. Multiple-choice loglikelihood tasks (HellaSwag/MMLU/TQA-MC2)
+share one context across N continuations, so the adapter caches the
+post-context KV state via Llama.save_state()/load_state() and only forwards
+the continuation tokens per choice — ~3-4× speedup vs reset-and-eval.
 
 Used as a custom lm_eval model via:
     lm_eval --model_args 'pretrained=<gguf>,n_ctx=2048,tokenizer_repo=<hf-id>,...' \\
@@ -32,7 +35,6 @@ Chat-template policy (replicates Kurt 2026, §3.1):
 """
 from __future__ import annotations
 
-import datetime as _dt
 import json as _json
 import math
 from typing import Any
@@ -45,12 +47,15 @@ from lm_eval.api.registry import register_model
 
 @register_model("gguf_local")
 class GGUFLocal(LM):
-    """In-process GGUF loglikelihood scorer using llama-cpp-python.
+    """In-process GGUF scorer + generator using llama-cpp-python.
 
-    Implements the three lm_eval LM methods used by 0-shot multiple-choice tasks
-    (hellaswag, mmlu, truthfulqa_mc2): loglikelihood, loglikelihood_rolling,
-    generate_until. The first is what HellaSwag uses. The other two are stubs
-    sufficient for the smoke-test scope; extend if you need GSM8K / IFEval.
+    Implements the four lm_eval LM methods used by the project's task set:
+      - loglikelihood: HellaSwag, MMLU, TruthfulQA-MC2 (with prefix-cache
+        fast path for shared-context groups, ~3-4× speedup)
+      - loglikelihood_rolling: WikiText-2 perplexity (sliding-window)
+      - generate_until: GSM8K, IFEval (greedy, temperature=0)
+      - apply_chat_template / chat_template / tokenizer_name: chat-template
+        rendering via parallel-loaded HF AutoTokenizer
     """
 
     def __init__(
@@ -64,6 +69,7 @@ class GGUFLocal(LM):
         max_length: int | None = None,
         tokenizer_repo: str | None = None,
         chat_template_kwargs: str | None = None,
+        prefix_cache: bool | str = True,
         **kwargs: Any,
     ):
         super().__init__()
@@ -85,10 +91,21 @@ class GGUFLocal(LM):
         self._max_length = int(max_length) if max_length else self._n_ctx
         self._eot = self._llm.token_eos()
 
+        # Prefix-cache toggle. Default ON (3-4× speedup on tasks with shared
+        # contexts: HellaSwag 1ctx→4cont, MMLU 1ctx→4cont, TruthfulQA-MC2
+        # 1ctx→N_choices). Set prefix_cache=False (or 'no' / 'off' / '0') in
+        # model_args to force the legacy reset-and-full-eval path; used for
+        # numerical-equivalence validation smokes.
+        if isinstance(prefix_cache, str):
+            self._prefix_cache = prefix_cache.lower() not in ("0", "no", "off", "false", "")
+        else:
+            self._prefix_cache = bool(prefix_cache)
+
         # HF tokenizer, loaded only if tokenizer_repo is given. Used exclusively
-        # for apply_chat_template() and for special-token-aware encoding when a
-        # template-formatted prompt comes back into tok_encode/_score_continuation.
-        # Inference still runs through the GGUF tokenizer above.
+        # for apply_chat_template() — the HF tokenizer renders chat-history dicts
+        # to a template string that lm-eval then passes back through our
+        # tok_encode / loglikelihood path. Inference still runs through the
+        # GGUF tokenizer above; the HF tokenizer never sees inference tensors.
         self._hf_tokenizer = None
         self._tokenizer_repo = tokenizer_repo
         if tokenizer_repo:
@@ -161,81 +178,196 @@ class GGUFLocal(LM):
 
     # ---- core scoring --------------------------------------------------------
 
-    def _score_continuation(self, context: str, continuation: str) -> tuple[float, bool]:
-        """Score continuation tokens given context. Returns (sum_logprob, is_greedy).
+    def _logprob_from_logits(self, logits: np.ndarray, tok_id: int) -> tuple[float, bool]:
+        """Compute log P(tok_id | preceding context) from a single logits row.
 
-        is_greedy: whether each continuation token was the argmax at its position.
-                   Used by hellaswag's `acc` metric (acc_norm uses sum_logprob).
+        Returns (logprob, is_argmax). Uses stable log-softmax: the max-shift
+        trick avoids overflow when logits have large magnitudes (Llama's
+        unembedding can produce values in the [-30, +40] range).
         """
-        # Tokenise. `special=True` so chat-template markers (when --apply_chat_template
-        # is on) survive tokenisation as single special tokens. `add_bos=False`
-        # for both context and continuation: when a chat template is applied
-        # by lm-eval, the template string already starts with the model's BOS
-        # token (e.g. <|begin_of_text|> for Llama-3.1) which is encoded as a
-        # special token via special=True. Adding another BOS via add_bos=True
-        # produces the "Added a BOS token... the prompt also starts with a BOS
-        # token" warning from llama.cpp and shifts every loglikelihood score by
-        # the (large negative) logprob of a duplicate BOS. For non-templated
-        # tasks (wikitext), loglikelihood_rolling adds BOS itself when
-        # appropriate. The harness's dataset-level convention also assumes the
-        # template / preface already provides any necessary BOS — see Kurt
-        # 2026 §3.1 for the same convention.
-        ctx_ids = self._llm.tokenize(context.encode("utf-8"), add_bos=False, special=True)
-        cont_ids = self._llm.tokenize(continuation.encode("utf-8"), add_bos=False, special=True)
+        mx = float(np.max(logits))
+        lse = mx + math.log(float(np.sum(np.exp(logits - mx))))
+        lp = float(logits[tok_id]) - lse
+        is_argmax = int(np.argmax(logits)) == int(tok_id)
+        return lp, is_argmax
 
-        if not cont_ids:
-            return 0.0, True
+    def _score_one_legacy(self, ctx_ids: list[int], cont_ids: list[int]) -> tuple[float, bool]:
+        """Reset-and-eval-from-scratch path (no prefix cache).
 
-        # Truncate the context from the LEFT if the joined sequence would overflow.
-        # We MUST keep the full continuation — we score every token of it.
+        Used only when prefix_cache=False is set in model_args. Kept for
+        numerical-equivalence validation against the prefix-cached path.
+        """
         full = ctx_ids + cont_ids
-        if len(full) > self._max_length:
-            overflow = len(full) - self._max_length
-            ctx_ids = ctx_ids[overflow:]
-            full = ctx_ids + cont_ids
-
-        # Reset cache state and evaluate the full sequence.
         self._llm.reset()
         self._llm.eval(full)
-
-        # llama-cpp-python stores logits for tokens [0, n_tokens) in self._scores
-        # when logits_all=True. Each row scores the *next* token, so the logit
-        # for token at position i was produced from prefix [0..i-1], i.e. by
-        # scoring row i-1.
-        scores = self._llm.scores[: len(full)]  # (T, vocab)
-
-        # Continuation tokens occupy positions [len(ctx_ids), len(full)). The
-        # logit row that predicted continuation token at position p is row p-1.
+        scores = self._llm.scores[: len(full)]
         cont_start = len(ctx_ids)
         sum_lp = 0.0
         all_greedy = True
         for i, tok_id in enumerate(cont_ids):
             row = cont_start + i - 1
             if row < 0 or row >= scores.shape[0]:
-                # Should not happen for non-empty contexts; defensive.
                 return float("-inf"), False
-            logits = scores[row]
-            # Stable log-softmax.
-            mx = float(np.max(logits))
-            lse = mx + math.log(float(np.sum(np.exp(logits - mx))))
-            lp = float(logits[tok_id]) - lse
+            lp, is_arg = self._logprob_from_logits(scores[row], tok_id)
             sum_lp += lp
-            if int(np.argmax(logits)) != int(tok_id):
+            if not is_arg:
                 all_greedy = False
         return sum_lp, all_greedy
 
+    def _score_continuations_with_shared_ctx(
+        self,
+        ctx_ids: list[int],
+        continuations: list[list[int]],
+    ) -> list[tuple[float, bool]]:
+        """Score N continuations that all share the same context, reusing the
+        KV cache via save_state/load_state. This is the fast path.
+
+        Layout per continuation:
+          1. (once per group) reset, eval(ctx), save_state — KV cache holds ctx.
+          2. (per cont) load_state, eval(cont), read logits at positions
+             [len(ctx)-1 .. len(ctx)+len(cont)-2], compute per-token logprobs.
+
+        The loaded state's n_tokens is len(ctx); after eval(cont) it is
+        len(ctx)+len(cont). The logits-row that *predicts* cont[i] is at
+        absolute position len(ctx)-1 + i — which is row len(ctx)+i-1 in
+        self._llm.scores. The first such row (i=0) was produced by the ctx
+        eval (the last logit row of the ctx pass) and is preserved across
+        load_state because save_state captures the scores array too.
+        """
+        # 1. Build the context KV state once.
+        self._llm.reset()
+        self._llm.eval(ctx_ids)
+        ctx_state = self._llm.save_state()
+        ctx_n = len(ctx_ids)
+
+        out: list[tuple[float, bool]] = []
+        for cont_ids in continuations:
+            if not cont_ids:
+                out.append((0.0, True))
+                continue
+
+            # Restore KV cache to "after ctx" position, then forward the
+            # continuation tokens. After this the model has scored every cont
+            # token conditioned on ctx + preceding cont tokens.
+            self._llm.load_state(ctx_state)
+            self._llm.eval(cont_ids)
+
+            # Logits-row that predicted cont[i] is row (ctx_n + i - 1):
+            # - For i=0: row ctx_n-1 was produced during the ctx eval (the
+            #   last logit of ctx, which predicts the next token, i.e. cont[0]).
+            # - For i>0: row ctx_n+i-1 was produced during the cont eval.
+            scores = self._llm.scores[: ctx_n + len(cont_ids)]
+            sum_lp = 0.0
+            all_greedy = True
+            for i, tok_id in enumerate(cont_ids):
+                row = ctx_n + i - 1
+                if row < 0 or row >= scores.shape[0]:
+                    sum_lp = float("-inf")
+                    all_greedy = False
+                    break
+                lp, is_arg = self._logprob_from_logits(scores[row], tok_id)
+                sum_lp += lp
+                if not is_arg:
+                    all_greedy = False
+            out.append((sum_lp, all_greedy))
+        return out
+
+    def _tokenize_request(self, context: str, continuation: str) -> tuple[list[int], list[int]]:
+        """Tokenize a (context, continuation) pair with the project's BOS / special
+        conventions. Truncates context from the left if needed; never truncates
+        the continuation (we MUST score every cont token).
+
+        See class docstring for the BOS rationale (chat-template provides BOS as
+        a special token; add_bos=True would double it).
+        """
+        ctx_ids = self._llm.tokenize(context.encode("utf-8"), add_bos=False, special=True)
+        cont_ids = self._llm.tokenize(continuation.encode("utf-8"), add_bos=False, special=True)
+        full_len = len(ctx_ids) + len(cont_ids)
+        if full_len > self._max_length:
+            overflow = full_len - self._max_length
+            ctx_ids = ctx_ids[overflow:]
+        return ctx_ids, cont_ids
+
     def loglikelihood(self, requests, disable_tqdm: bool = False) -> list[tuple[float, bool]]:
-        # `requests` is a list of lm_eval Instance objects whose .args is (context, continuation).
+        """Score every (context, continuation) pair in `requests`.
+
+        Performance optimization: when `prefix_cache=True` (default), groups
+        consecutive requests by identical context and scores the N continuations
+        of a context with a single ctx-eval + N short cont-evals (plus state
+        save/load between conts). For HellaSwag (1 ctx → 4 conts), MMLU
+        (1 ctx → 4 conts) and TruthfulQA-MC2 (1 ctx → variable conts) this
+        gives ~3.5× speedup vs full-reset-per-call.
+
+        lm-eval emits requests in document order, so the 4 HellaSwag
+        continuations of doc D arrive consecutively as 4 separate Instances
+        with .args[0] == identical context string. Same for MMLU and TQA-MC2.
+        We exploit that ordering directly.
+        """
         try:
             from tqdm import tqdm  # type: ignore
         except ImportError:  # pragma: no cover
             tqdm = lambda x, **k: x  # noqa: E731
 
         out: list[tuple[float, bool]] = []
-        iterator = requests if disable_tqdm else tqdm(requests, desc="loglikelihood (gguf_local)")
+        iterator = requests if disable_tqdm else tqdm(
+            requests, desc=f"loglikelihood (gguf_local{', cached' if self._prefix_cache else ', no-cache'})"
+        )
+
+        if not self._prefix_cache:
+            for req in iterator:
+                ctx, cont = req.args
+                ctx_ids, cont_ids = self._tokenize_request(ctx, cont)
+                if not cont_ids:
+                    out.append((0.0, True))
+                    continue
+                out.append(self._score_one_legacy(ctx_ids, cont_ids))
+            return out
+
+        # Prefix-cached path. Walk requests, accumulate same-context runs,
+        # flush each run with shared-ctx scoring.
+        pending_ctx_str: str | None = None
+        pending_ctx_ids: list[int] | None = None
+        pending_conts: list[list[int]] = []
+
+        def flush() -> None:
+            nonlocal pending_ctx_str, pending_ctx_ids, pending_conts
+            if pending_ctx_ids is None or not pending_conts:
+                pending_ctx_str = None
+                pending_ctx_ids = None
+                pending_conts = []
+                return
+            results = self._score_continuations_with_shared_ctx(pending_ctx_ids, pending_conts)
+            out.extend(results)
+            pending_ctx_str = None
+            pending_ctx_ids = None
+            pending_conts = []
+
         for req in iterator:
             ctx, cont = req.args
-            out.append(self._score_continuation(ctx, cont))
+            # Tokenize cont eagerly (cheap) so we can keep all the state
+            # in pending_conts. We also need to know whether the ctx string
+            # matches the pending one — string equality before tokenization
+            # avoids tokenizing each ctx repeatedly.
+            if ctx != pending_ctx_str:
+                flush()
+                pending_ctx_str = ctx
+                pending_ctx_ids, _ = self._tokenize_request(ctx, "")
+            cont_ids = self._llm.tokenize(cont.encode("utf-8"), add_bos=False, special=True)
+            # If this single (ctx + cont) would overflow max_length, fall back
+            # to the legacy path for this one request to keep the truncation
+            # logic in _tokenize_request authoritative. Rare for chat-template
+            # prompts at n_ctx=2048.
+            if pending_ctx_ids is not None and len(pending_ctx_ids) + len(cont_ids) > self._max_length:
+                flush()
+                ctx_ids_trunc, cont_ids_trunc = self._tokenize_request(ctx, cont)
+                if not cont_ids_trunc:
+                    out.append((0.0, True))
+                else:
+                    out.append(self._score_one_legacy(ctx_ids_trunc, cont_ids_trunc))
+                continue
+            pending_conts.append(cont_ids)
+
+        flush()
         return out
 
     def loglikelihood_rolling(self, requests, disable_tqdm: bool = False) -> list[float]:
