@@ -167,12 +167,20 @@ class GGUFLocal(LM):
         is_greedy: whether each continuation token was the argmax at its position.
                    Used by hellaswag's `acc` metric (acc_norm uses sum_logprob).
         """
-        # Tokenise. BOS only on the very first prompt position; the harness's
-        # default convention is no extra BOS for either context or continuation
-        # because the dataset already includes any necessary preface. `special=True`
-        # so chat-template markers (when --apply_chat_template is on) survive
-        # tokenisation as single special tokens.
-        ctx_ids = self._llm.tokenize(context.encode("utf-8"), add_bos=True, special=True)
+        # Tokenise. `special=True` so chat-template markers (when --apply_chat_template
+        # is on) survive tokenisation as single special tokens. `add_bos=False`
+        # for both context and continuation: when a chat template is applied
+        # by lm-eval, the template string already starts with the model's BOS
+        # token (e.g. <|begin_of_text|> for Llama-3.1) which is encoded as a
+        # special token via special=True. Adding another BOS via add_bos=True
+        # produces the "Added a BOS token... the prompt also starts with a BOS
+        # token" warning from llama.cpp and shifts every loglikelihood score by
+        # the (large negative) logprob of a duplicate BOS. For non-templated
+        # tasks (wikitext), loglikelihood_rolling adds BOS itself when
+        # appropriate. The harness's dataset-level convention also assumes the
+        # template / preface already provides any necessary BOS — see Kurt
+        # 2026 §3.1 for the same convention.
+        ctx_ids = self._llm.tokenize(context.encode("utf-8"), add_bos=False, special=True)
         cont_ids = self._llm.tokenize(continuation.encode("utf-8"), add_bos=False, special=True)
 
         if not cont_ids:
