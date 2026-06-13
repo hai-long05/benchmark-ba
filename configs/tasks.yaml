@@ -1,26 +1,39 @@
 # lm-eval-harness v0.4.9.2 task IDs, versions, shots — pinned per Kurt (2026) and exposé §4.4.
+#
+# `apply_chat_template` per task: true for prompted tasks (Kurt §3.1: "prompts
+# were formatted using the default Llama-3.1-8B-Instruct chat template"), false
+# for wikitext (loglikelihood_rolling on a fixed corpus is not a prompted task).
+# Tasks with apply_chat_template:true are dispatched together in 40_lm_eval.sh
+# with --apply_chat_template --fewshot_as_multiturn; tasks with false are
+# dispatched in a separate subprocess without those flags.
 tasks:
   hellaswag:
     task_id: hellaswag
     num_fewshot: 0
     primary_metric: acc_norm
+    apply_chat_template: true
   gsm8k:
     task_id: gsm8k
     num_fewshot: 5
     primary_metric: exact_match   # from filter "flexible-extract" per Kurt; aggregator stores keys with the ",filter" suffix stripped
+    apply_chat_template: true
   ifeval:
     task_id: ifeval
     num_fewshot: 0
     primary_metric: prompt_level_strict_acc   # one of four; aggregator records all four
+    apply_chat_template: true
   mmlu:
     task_id: mmlu
     num_fewshot: 0
     primary_metric: acc
+    apply_chat_template: true
   truthfulqa_mc2:
     task_id: truthfulqa_mc2
     num_fewshot: 0
     primary_metric: acc
+    apply_chat_template: true
   wikitext:
     task_id: wikitext
     num_fewshot: 0
     primary_metric: word_perplexity
+    apply_chat_template: false   # corpus-level loglikelihood_rolling, not a prompted task

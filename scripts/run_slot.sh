@@ -6,10 +6,19 @@
 # Special schemes: F16 / FP16 — uses the unquantized FP16 GGUF as-is, no quantize step.
 #
 # Env vars:
-#   PERF_ONLY=1      — run only env-capture + bench, skip lm_eval. Used for the
-#                      ctx=2048 perf sweep where accuracy is identical to ctx=512.
-#   LM_EVAL_LIMIT=N  — pass through to 40_lm_eval.sh.
-#   LLAMA_CPP_DIR    — path to llama.cpp checkout (default ../llama.cpp).
+#   PERF_ONLY=1            — run only env-capture + bench, skip lm_eval. Used for the
+#                            ctx=2048 perf sweep where accuracy is identical to ctx=512.
+#   LM_EVAL_LIMIT=N        — pass through to 40_lm_eval.sh.
+#   LLAMA_CPP_DIR          — path to llama.cpp checkout (default ../llama.cpp).
+#   TOKENIZER_REPO         — HF id whose tokenizer holds the chat template. Defaults
+#                            to <hf-id> itself (the Instruct model's own tokenizer is
+#                            the canonical chat-template source — Kurt 2026 §3.1).
+#                            Override only if the GGUF was quantized from a different
+#                            base than the chat-template owner.
+#   CHAT_TEMPLATE_KWARGS   — JSON dict forwarded into apply_chat_template. Auto-set to
+#                            '{"enable_thinking": false}' when the model is Qwen3
+#                            (suppresses <think>...</think> blocks during loglikelihood
+#                            scoring); pass empty string to override.
 set -euo pipefail
 
 HF_ID="${1:?Usage: $0 <hf-id> <SCHEME> <ctx> [<repeats>] [<task1,task2,...>]}"
@@ -21,6 +30,19 @@ TASKS_CSV="${5:-hellaswag}"
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-../llama.cpp}"
 export LLAMA_CPP_DIR
 PERF_ONLY="${PERF_ONLY:-0}"
+
+# Chat-template defaults: tokenizer_repo = HF_ID unless overridden, and Qwen3
+# gets enable_thinking=false. Lifting these into env so 40_lm_eval.sh sees them.
+TOKENIZER_REPO="${TOKENIZER_REPO:-$HF_ID}"
+export TOKENIZER_REPO
+if [ -z "${CHAT_TEMPLATE_KWARGS+x}" ]; then
+  # CHAT_TEMPLATE_KWARGS unset (not just empty). Apply Qwen3 default.
+  case "$HF_ID" in
+    *[Qq]wen3*) CHAT_TEMPLATE_KWARGS='{"enable_thinking": false}' ;;
+    *)          CHAT_TEMPLATE_KWARGS='' ;;
+  esac
+fi
+export CHAT_TEMPLATE_KWARGS
 
 # 1. Ensure env captured.
 if [ ! -f env/host.json ] || [ ! -f env/llama_cpp.json ] || [ ! -f env/lm_eval.json ]; then
@@ -82,11 +104,43 @@ mkdir -p "$SLOT_DIR"
 # 5. Write slot.json via Python (safe escaping).
 MODEL_NAME=$(basename "$HF_ID")
 python3 - "$RUN_ID" "$MODEL_NAME" "$HF_ID" "$FP16_SHA" "$SCHEME" "$QUANT_SHA" \
-  "$QUANT_META" "$CTX" "$REPEATS" "$HOST_ID" "$LLAMA_COMMIT" "$LM_EVAL_VER" "$SLOT_DIR" <<'PY'
-import json, sys
+  "$QUANT_META" "$CTX" "$REPEATS" "$HOST_ID" "$LLAMA_COMMIT" "$LM_EVAL_VER" \
+  "$TOKENIZER_REPO" "$CHAT_TEMPLATE_KWARGS" "$TASKS_CSV" "$PERF_ONLY" "$SLOT_DIR" <<'PY'
+import json, sys, os
+import yaml
+
 (run_id, model_name, hf_id, fp16_sha, scheme, quant_sha,
- quant_meta_path, ctx, repeats, host_id, llama_commit, lm_eval_ver, slot_dir) = sys.argv[1:14]
+ quant_meta_path, ctx, repeats, host_id, llama_commit, lm_eval_ver,
+ tokenizer_repo, chat_template_kwargs, tasks_csv, perf_only, slot_dir) = sys.argv[1:18]
+
 qm = json.load(open(quant_meta_path))
+
+ctk = None
+if chat_template_kwargs:
+    try:
+        ctk = json.loads(chat_template_kwargs)
+    except json.JSONDecodeError:
+        ctk = chat_template_kwargs  # store raw if not parseable
+
+# Resolve applied_to / skipped_for from the actual TASKS_CSV crossed with the
+# per-task chat-template policy in configs/tasks.yaml. Skipped if PERF_ONLY=1
+# (no lm_eval ran), or for tasks whose YAML entry has apply_chat_template:false.
+chat_template_block = None
+if perf_only != "1":
+    cfg = yaml.safe_load(open("configs/tasks.yaml"))["tasks"]
+    requested = [k.strip() for k in tasks_csv.split(",") if k.strip()]
+    applied_to = [k for k in requested
+                  if k in cfg and bool(cfg[k].get("apply_chat_template", False))]
+    skipped_for = [k for k in requested
+                   if k in cfg and not bool(cfg[k].get("apply_chat_template", False))]
+    chat_template_block = {
+        "tokenizer_repo": tokenizer_repo,
+        "chat_template_kwargs": ctk,
+        "applied_to": applied_to,
+        "skipped_for": skipped_for,
+        "fewshot_as_multiturn": True if applied_to else False,
+    }
+
 slot = {
   "run_id": run_id,
   "model": {"name": model_name, "hf_id": hf_id, "fp16_sha256": fp16_sha},
@@ -102,7 +156,12 @@ slot = {
   "host_id": host_id,
   "llama_cpp_commit": llama_commit,
   "lm_eval_version": lm_eval_ver,
+  "tasks_requested": [k.strip() for k in tasks_csv.split(",") if k.strip()],
+  "perf_only": perf_only == "1",
 }
+if chat_template_block is not None:
+    slot["chat_template"] = chat_template_block
+
 with open(f"{slot_dir}/slot.json", "w") as f:
     json.dump(slot, f, indent=2)
 print(f"wrote {slot_dir}/slot.json")

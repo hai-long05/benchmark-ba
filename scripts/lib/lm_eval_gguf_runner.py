@@ -11,13 +11,29 @@ from the full softmax — the same scoring path lm_eval's `hf` backend uses for
 non-GGUF models. Result: correct numbers, ~10x faster, no HTTP, no proxy.
 
 Used as a custom lm_eval model via:
-    lm_eval --model_args 'pretrained=<gguf>,n_ctx=2048,...' \\
+    lm_eval --model_args 'pretrained=<gguf>,n_ctx=2048,tokenizer_repo=<hf-id>,...' \\
             --include_path scripts/lib --model gguf_local ...
 
 Registered with @register_model('gguf_local').
+
+Chat-template policy (replicates Kurt 2026, §3.1):
+    When `tokenizer_repo` is set, an HF AutoTokenizer is loaded in parallel to
+    the GGUF (HF tokenizer for prompt formatting only — never for inference).
+    apply_chat_template() then dispatches to the HF tokenizer, which is the
+    canonical source of the model's default chat template. Special tokens
+    introduced by the template (e.g. <|start_header_id|>) are recognised at
+    encode time via `special=True`, otherwise they would shatter into BPE
+    fragments and the loglikelihood would be meaningless.
+
+    For Qwen3, `chat_template_kwargs={enable_thinking: False}` is forwarded to
+    apply_chat_template so the loglikelihood path does not get prefixed with
+    <think>...</think> tokens (which would render the continuation logprob
+    near-zero).
 """
 from __future__ import annotations
 
+import datetime as _dt
+import json as _json
 import math
 from typing import Any
 
@@ -46,6 +62,8 @@ class GGUFLocal(LM):
         verbose: bool = False,
         batch_size: int = 1,
         max_length: int | None = None,
+        tokenizer_repo: str | None = None,
+        chat_template_kwargs: str | None = None,
         **kwargs: Any,
     ):
         super().__init__()
@@ -66,6 +84,40 @@ class GGUFLocal(LM):
         self._batch_size = int(batch_size)
         self._max_length = int(max_length) if max_length else self._n_ctx
         self._eot = self._llm.token_eos()
+
+        # HF tokenizer, loaded only if tokenizer_repo is given. Used exclusively
+        # for apply_chat_template() and for special-token-aware encoding when a
+        # template-formatted prompt comes back into tok_encode/_score_continuation.
+        # Inference still runs through the GGUF tokenizer above.
+        self._hf_tokenizer = None
+        self._tokenizer_repo = tokenizer_repo
+        if tokenizer_repo:
+            try:
+                from transformers import AutoTokenizer  # type: ignore
+            except ImportError as e:
+                raise RuntimeError(
+                    "tokenizer_repo set but `transformers` not installed — "
+                    "add transformers to requirements.txt"
+                ) from e
+            self._hf_tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_repo, trust_remote_code=False
+            )
+
+        # Optional kwargs forwarded into apply_chat_template (e.g.
+        # `{"enable_thinking": false}` for Qwen3 to suppress reasoning blocks
+        # during loglikelihood scoring). lm_eval passes model_args as strings,
+        # so we accept either a JSON-encoded string or a dict.
+        self._chat_template_kwargs: dict[str, Any] = {}
+        if chat_template_kwargs:
+            if isinstance(chat_template_kwargs, dict):
+                self._chat_template_kwargs = dict(chat_template_kwargs)
+            else:
+                try:
+                    self._chat_template_kwargs = _json.loads(chat_template_kwargs)
+                except _json.JSONDecodeError as e:
+                    raise ValueError(
+                        f"chat_template_kwargs must be JSON, got: {chat_template_kwargs!r}"
+                    ) from e
 
     # ---- lm_eval API ---------------------------------------------------------
 
@@ -98,7 +150,11 @@ class GGUFLocal(LM):
         return 1
 
     def tok_encode(self, string: str, add_bos: bool = False) -> list[int]:
-        return self._llm.tokenize(string.encode("utf-8"), add_bos=add_bos, special=False)
+        # `special=True` so that template markers like <|start_header_id|> are
+        # recognised as single special tokens rather than shattered into BPE
+        # pieces. Safe for non-templated text too: the GGUF tokenizer falls
+        # back to normal BPE for substrings that don't match a special token.
+        return self._llm.tokenize(string.encode("utf-8"), add_bos=add_bos, special=True)
 
     def tok_decode(self, tokens: list[int]) -> str:
         return self._llm.detokenize(tokens).decode("utf-8", errors="replace")
@@ -113,9 +169,11 @@ class GGUFLocal(LM):
         """
         # Tokenise. BOS only on the very first prompt position; the harness's
         # default convention is no extra BOS for either context or continuation
-        # because the dataset already includes any necessary preface.
-        ctx_ids = self._llm.tokenize(context.encode("utf-8"), add_bos=True, special=False)
-        cont_ids = self._llm.tokenize(continuation.encode("utf-8"), add_bos=False, special=False)
+        # because the dataset already includes any necessary preface. `special=True`
+        # so chat-template markers (when --apply_chat_template is on) survive
+        # tokenisation as single special tokens.
+        ctx_ids = self._llm.tokenize(context.encode("utf-8"), add_bos=True, special=True)
+        cont_ids = self._llm.tokenize(continuation.encode("utf-8"), add_bos=False, special=True)
 
         if not cont_ids:
             return 0.0, True
@@ -195,7 +253,7 @@ class GGUFLocal(LM):
         iterator = requests if disable_tqdm else tqdm(requests, desc="loglikelihood_rolling (gguf_local)")
         for req in iterator:
             string = req.args[0]
-            tokens = self._llm.tokenize(string.encode("utf-8"), add_bos=True, special=False)
+            tokens = self._llm.tokenize(string.encode("utf-8"), add_bos=True, special=True)
             n = len(tokens)
             if n < 2:
                 out.append(0.0)
@@ -296,9 +354,47 @@ class GGUFLocal(LM):
             out.append(text)
         return out
 
-    def apply_chat_template(self, chat_history, add_generation_prompt: bool = True) -> str:  # type: ignore[override]
-        # HellaSwag and other loglikelihood tasks do not invoke this; raw text scoring is correct.
-        # Implement only if a future task needs chat-templated prompts.
-        raise NotImplementedError(
-            "gguf_local: apply_chat_template not implemented; only raw-text loglikelihood tasks are supported"
+    def apply_chat_template(
+        self,
+        chat_history: list[dict[str, str]],
+        add_generation_prompt: bool = True,
+    ) -> str:  # type: ignore[override]
+        """Render a chat-history list to a string under the model's default template.
+
+        Loaded from the HF tokenizer of `tokenizer_repo` (set via model_args). This
+        replicates Kurt 2026 §3.1: "prompts were formatted using the default
+        Llama-3.1-8B-Instruct chat template". For Mistral-Instruct and Qwen3 the
+        same convention applies — each model's own default template, sourced from
+        its HF repo.
+
+        Forwards `chat_template_kwargs` (also from model_args) into
+        tokenizer.apply_chat_template — used for Qwen3's `enable_thinking=False`
+        to suppress reasoning blocks during loglikelihood scoring.
+        """
+        if self._hf_tokenizer is None:
+            raise RuntimeError(
+                "apply_chat_template called but tokenizer_repo not set in model_args. "
+                "Pass tokenizer_repo=<hf-id> when running with --apply_chat_template."
+            )
+        return self._hf_tokenizer.apply_chat_template(
+            chat_history,
+            tokenize=False,
+            add_generation_prompt=add_generation_prompt,
+            **self._chat_template_kwargs,
         )
+
+    @property
+    def tokenizer_name(self) -> str:
+        # lm-eval's chat-template logic queries this to log which tokenizer
+        # produced the prompts. Fall back to the GGUF path so it never crashes.
+        return self._tokenizer_repo or self._pretrained
+
+    @property
+    def chat_template(self) -> str | None:
+        # lm-eval inspects this to decide whether the model "has" a chat
+        # template at all. Returning the HF tokenizer's template string makes
+        # the framework's "instruct/chat variant" detection happy and gives
+        # the run-config record a canonical reference of what was applied.
+        if self._hf_tokenizer is None:
+            return None
+        return getattr(self._hf_tokenizer, "chat_template", None)

@@ -14,17 +14,13 @@ BENCH_BIN="$LLAMA_CPP_DIR/build/bin/llama-bench"
 [ -f "$GGUF" ] || { echo "ERROR: $GGUF not found" >&2; exit 1; }
 [ -x "$BENCH_BIN" ] || { echo "ERROR: $BENCH_BIN not found" >&2; exit 1; }
 
-# Token-generation count for the tg measurement. Default: 128 tokens at any ctx
-# matches Kurt 2026 Table 3. For ctx=2048 we extend to 256 to get steady-state
-# decode (the first 128 tokens at long ctx are dominated by KV-warmup tail).
-# Override with N_GEN env var if needed.
-if [ -n "${N_GEN:-}" ]; then
-  TG_N="$N_GEN"
-elif [ "$CTX" -ge 2048 ]; then
-  TG_N=256
-else
-  TG_N=128
-fi
+# Token-generation count for the tg measurement. Always 128 to match Kurt 2026
+# Tab. 3 (which uses tg128 at all context lengths) and the methodology's H3
+# operationalization (q = tg128_ctx=2048 / tg128_ctx=512). The KV-warmup tail
+# at long context can inflate run-to-run variance for the first ~few tokens;
+# we mitigate via REPEATS≥3 and median+IQR reporting (methodology §perf-stat).
+# Override with N_GEN env var only for diagnostic/exploratory runs.
+TG_N="${N_GEN:-128}"
 
 mkdir -p "$OUT_DIR/bench_raw"
 
