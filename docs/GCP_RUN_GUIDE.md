@@ -10,12 +10,13 @@ The reference machine assumed throughout: **`c3-standard-192`** (192 vCPUs / 96 
 
 ## 0. What changed since v1 of this guide
 
-If you read an older version of this guide, four things are different now:
+If you read an older version of this guide, five things are different now:
 
 1. **llama.cpp commit corrected.** v1 pinned `1bfbdb134…`, but Kurt 2026 §3.1 footnote 3 cites release tag `b7600`, which is git commit `be47fb9285779e900915bd8246eb9664110d4ba5`. Quantized weights from a different llama-quantize build can shift K-quant outputs enough to break the ±2·SE_Kurt acceptance band — re-build llama.cpp from this commit on the GCP box (§3.3) before any quantization step.
-2. **Chat-template convention is on by default.** All five prompted accuracy tasks (GSM8K, HellaSwag, IFEval, MMLU, TruthfulQA-MC2) are now run with `--apply_chat_template --fewshot_as_multiturn`, sourcing each model's default template from its HF tokenizer. WikiText-2 is run separately without those flags. This replicates Kurt 2026 §3.1 ("prompts were formatted using the default Llama-3.1-8B-Instruct chat template") and is required for SF1 to land inside the ±2·SE_Kurt acceptance band.
+2. **Chat-template convention is task-specific, not global.** IFEval and GSM8K (5-shot) run with `--apply_chat_template --fewshot_as_multiturn`. HellaSwag, MMLU, TruthfulQA-MC2, and WikiText-2 run **without** chat template. This matches HuggingFace Open-LLM-Leaderboard v2 and was empirically validated: HellaSwag-Q4_K_S at limit=200 gives 0.685 acc_norm without template (within 1.2σ of Kurt's full 0.7279) vs. 0.610 with template (3.4σ off). The convention is encoded per-task in `configs/tasks.yaml`; the dispatcher in `40_lm_eval.sh` runs three lm_eval invocations per slot (one untemplated 0-shot group, one templated 0-shot group, one templated 5-shot group).
 3. **Cross-family models locked in.** Qwen variant is **Qwen3-8B** (decided), not Qwen3-4B. All three models are now in the 7–8 B class, which doubles as a model-size control for the cross-family comparison.
-4. **Mistral may be gated.** Recent mistralai-org policy gates several Instruct repos. Verify access in §1.1 *before* paying for the GCP instance.
+4. **Prefix caching.** The custom GGUF adapter caches the post-context KV state via `Llama.save_state()`/`load_state()` and forwards only continuation tokens per choice. ~3–4× speedup on shared-context loglikelihood tasks. Disable for validation via `prefix_cache=False` in model_args.
+5. **Mistral may be gated.** Recent mistralai-org policy gates several Instruct repos. Verify access in §1.1 *before* paying for the GCP instance.
 
 Every script change that backs these decisions is already on `main` — `scripts/lib/lm_eval_gguf_runner.py`, `scripts/40_lm_eval.sh`, `scripts/run_slot.sh`, `scripts/sweep.sh`, `configs/tasks.yaml`, `requirements.txt`. You don't need to touch them — but if you fork an older branch, rebase first.
 
@@ -252,40 +253,58 @@ d = json.load(open("$RESULT"))
 t = d['tasks']
 print(f"pp512: {d['pp']['median']:.1f} tok/s   (target: > 350 — Kurt: 92.5 on Mac, you have AMX)")
 print(f"tg128: {d['tg']['median']:.2f} tok/s   (target: > 30)")
-print(f"hellaswag acc_norm:    {t['hellaswag']['acc_norm']:.4f}    (target: 0.71-0.75; Kurt full: 0.7279)")
-print(f"gsm8k flex-extract:    {t['gsm8k']['exact_match_flexible_extract']:.4f}    (target: 0.74-0.81; Kurt full: 0.7733)")
-print(f"truthfulqa_mc2:        {t['truthfulqa_mc2']['acc']:.4f}    (target: 0.50-0.57; Kurt full: 0.5340)")
-# IFEval has four sub-metrics; primary is prompt_level_loose_acc (PLL) per Kurt Tab 6.
+# HellaSwag, MMLU, TQA-MC2 run WITHOUT chat template (Open-LLM-Leaderboard v2
+# convention; see §0). Targets are Kurt's full values ± ~2·SE at n=200 (~±0.07).
+print(f"hellaswag acc_norm:    {t['hellaswag']['acc_norm']:.4f}    (target: 0.65-0.75; Kurt full: 0.7279)")
+print(f"truthfulqa_mc2:        {t['truthfulqa_mc2']['acc']:.4f}    (target: 0.48-0.59; Kurt full: 0.5340)")
+# IFEval and GSM8K run WITH chat template + fewshot_as_multiturn.
+print(f"gsm8k flex-extract:    {t['gsm8k']['exact_match_flexible_extract']:.4f}    (target: 0.70-0.84; Kurt full: 0.7733)")
 ifeval_pll = t['ifeval'].get('prompt_level_loose_acc', t['ifeval'].get('prompt_level_strict_acc'))
 print(f"ifeval PLL:            {ifeval_pll:.4f}    (target: 0.74-0.84; Kurt full Q4_K_S PLL: 0.7911)")
 PY
 ```
 
-If **all six** pass, you're cleared for the full sweep. **If IFEval fails low** (PLL < 0.70), the chat-template path is not engaged — go to §4.5 and verify before re-running. **If anything else misses, stop** — re-running 14 broken slots wastes ~50 hours of GCP time. Tell me the specific failure.
+If **all six** pass, you're cleared for the full sweep. If HellaSwag is below 0.65, the chat-template-on-loglikelihood regression is back — verify §4.5 shows HellaSwag was dispatched in the *un*templated group (`_group_fs0_notmpl`), not the templated one. If IFEval-PLL is below 0.70, the chat-template path is broken on the templated group — verify §4.5 shows IFEval has a `_group_fs0_tmpl` log.
 
-### 4.5 Verify the chat-template path actually fired
+**Important if any check misses:** stop. Re-running 14 broken slots wastes ~50 hours of GCP time. Tell me the specific failure.
 
-This is the single most likely source of silent miscalibration. Two checks:
+### 4.5 Verify the chat-template dispatch is correct per task
+
+The smoke set has tasks on both sides of the convention split: HellaSwag and
+TruthfulQA-MC2 must run *without* template, IFEval and GSM8K *with*. A silent
+mis-dispatch (e.g. all tasks templated, or none) shifts results by 5–10 points
+and is the single most common cause of a sweep producing wrong numbers.
 
 ```bash
 SLOT=$(ls -td results/*-meta-llama_llama-3.1-8b-instruct-q4_k_s-ctx512 | head -1)
 
-# 1. slot.json records the convention
+# 1. slot.json records the convention per actual TASKS_CSV
 jq '.chat_template' "$SLOT/slot.json"
-# expect: {"tokenizer_repo": "meta-llama/Llama-3.1-8B-Instruct",
-#          "chat_template_kwargs": null,
-#          "applied_to": ["hellaswag","gsm8k","ifeval","mmlu","truthfulqa_mc2"],
-#          "skipped_for": ["wikitext"],
-#          "fewshot_as_multiturn": true}
+# expect:
+# {"tokenizer_repo": "meta-llama/Llama-3.1-8B-Instruct",
+#  "chat_template_kwargs": null,
+#  "applied_to":   ["gsm8k", "ifeval"],
+#  "skipped_for":  ["hellaswag", "truthfulqa_mc2"],
+#  "fewshot_as_multiturn": true}
 
-# 2. lm_eval's templated-group log mentions the template was applied
-grep -E "chat_template|apply_chat_template|tokenizer_repo" \
-  "$SLOT/lm_eval/_group_fs0_tmpl.log" "$SLOT/lm_eval/_group_fs5_tmpl.log" 2>/dev/null | head -20
-# expect: at least one line mentioning the applied template / tokenizer_repo,
-# zero lines saying "instruct/chat variant but chat template is not applied"
+# 2. Three group logs should exist with distinct dispatch
+ls "$SLOT/lm_eval/"_group_*.log
+# expect three files:
+#   _group_fs0_notmpl.log   (hellaswag, truthfulqa_mc2 — no template)
+#   _group_fs0_tmpl.log     (ifeval — template on)
+#   _group_fs5_tmpl.log     (gsm8k — template on, 5-shot multiturn)
+
+# 3. Notmpl log should NOT mention applied_chat_template; tmpl logs should
+grep -E "apply_chat_template|chat_template_applied" "$SLOT/lm_eval/_group_fs0_notmpl.log" | head -3
+# expect: empty (or only the warning "appears to be an instruct/chat variant
+# but chat template is not applied" — that warning is EXPECTED for the
+# notmpl group at v0.4.9.2 when running an instruct model without --apply_chat_template)
+
+grep -E "apply_chat_template" "$SLOT/lm_eval/_group_fs0_tmpl.log" "$SLOT/lm_eval/_group_fs5_tmpl.log" 2>/dev/null | head -3
+# expect: at least one mention per file
 ```
 
-If §4.5 check 2 surfaces the warning **"appears to be an instruct or chat variant but chat template is not applied"** — the convention silently fell back to off. Stop, debug locally, do not start the sweep.
+If `applied_to`/`skipped_for` is wrong, the tasks.yaml field is misread — check `configs/tasks.yaml`. If the group log files don't split into three, `40_lm_eval.sh` group dispatch is buggy. If the templated groups crash with `apply_chat_template called but tokenizer_repo not set`, the env-var propagation broke (see §11 quick reference).
 
 ### 4.6 Pre-fetch all 14 quants while smoke runs
 

@@ -1,17 +1,35 @@
 # lm-eval-harness v0.4.9.2 task IDs, versions, shots — pinned per Kurt (2026) and exposé §4.4.
 #
-# `apply_chat_template` per task: true for prompted tasks (Kurt §3.1: "prompts
-# were formatted using the default Llama-3.1-8B-Instruct chat template"), false
-# for wikitext (loglikelihood_rolling on a fixed corpus is not a prompted task).
-# Tasks with apply_chat_template:true are dispatched together in 40_lm_eval.sh
-# with --apply_chat_template --fewshot_as_multiturn; tasks with false are
-# dispatched in a separate subprocess without those flags.
+# Chat-template policy is TASK-SPECIFIC, matching HuggingFace's Open-LLM-Leaderboard
+# v2 convention (Fourrier et al. 2024) and validated empirically against Kurt's
+# Tab. 2 values for Llama-3.1-8B-Instruct-Q4_K_S:
+#
+#   - Generation tasks designed for chat models (IFEval, GSM8K-fewshot)
+#     → apply_chat_template: true. The model needs its native instruction
+#       framing for instruction-following accuracy.
+#
+#   - Multiple-choice loglikelihood tasks (HellaSwag, MMLU, TruthfulQA-MC2)
+#     → apply_chat_template: false. These score sentence-completion logprobs,
+#       NOT chat responses. Wrapping the context as a user-turn and the
+#       continuation as an assistant-response shifts the continuations off
+#       the distribution the instruct model was trained on. Empirical drift
+#       on Llama-3.1-8B-Q4_K_S HellaSwag at limit=200: 0.685 acc_norm without
+#       template (within 1.2σ of Kurt's full 0.7279), 0.610 with template
+#       (3.4σ off). Kurt's "default chat template" statement (paper §3.1)
+#       refers to the chat-format-required tasks, not the loglikelihood ones.
+#
+#   - Corpus perplexity (WikiText-2)
+#     → apply_chat_template: false. Not a prompted task at all; rolling
+#       loglikelihood over a fixed text corpus.
+#
+# Tasks are dispatched in 40_lm_eval.sh in groups by (num_fewshot, apply_chat_template),
+# so each lm_eval invocation has a single template policy and a single fewshot value.
 tasks:
   hellaswag:
     task_id: hellaswag
     num_fewshot: 0
     primary_metric: acc_norm
-    apply_chat_template: true
+    apply_chat_template: false
   gsm8k:
     task_id: gsm8k
     num_fewshot: 5
@@ -26,12 +44,12 @@ tasks:
     task_id: mmlu
     num_fewshot: 0
     primary_metric: acc
-    apply_chat_template: true
+    apply_chat_template: false
   truthfulqa_mc2:
     task_id: truthfulqa_mc2
     num_fewshot: 0
     primary_metric: acc
-    apply_chat_template: true
+    apply_chat_template: false
   wikitext:
     task_id: wikitext
     num_fewshot: 0
