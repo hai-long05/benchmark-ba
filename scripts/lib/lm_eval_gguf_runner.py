@@ -273,15 +273,48 @@ class GGUFLocal(LM):
         return out
 
     def _tokenize_request(self, context: str, continuation: str) -> tuple[list[int], list[int]]:
-        """Tokenize a (context, continuation) pair with the project's BOS / special
-        conventions. Truncates context from the left if needed; never truncates
-        the continuation (we MUST score every cont token).
+        """Tokenize a (context, continuation) pair with BPE-correct word boundaries.
 
-        See class docstring for the BOS rationale (chat-template provides BOS as
-        a special token; add_bos=True would double it).
+        Critical: BPE tokenizers produce different token sequences for
+        ``tokenize(ctx) + tokenize(cont)`` versus ``tokenize(ctx + cont)`` when
+        the boundary falls inside a word piece (e.g. continuation `" The"`
+        merges with a preceding period differently when tokenized in isolation
+        vs. as part of the joined string). lm-eval's TemplateLM uses the
+        "tokenize joined, then find the split via re-tokenizing context"
+        convention; we mirror it so HellaSwag/MMLU/TQA-MC2 logprobs match the
+        harness's reference implementation.
+
+        Returns (ctx_ids, cont_ids) where the concatenation reproduces the
+        joint tokenization of (context + continuation). Truncates ctx_ids
+        from the left if the joined sequence overflows max_length.
+
+        BOS rationale: when a chat template is applied by lm-eval, the
+        templated context already starts with the model's BOS token (e.g.
+        <|begin_of_text|> for Llama-3.1) which `special=True` recognises as
+        a single special token. Adding another BOS via add_bos=True would
+        double it and shift every loglikelihood by the (large negative)
+        logprob of a duplicate BOS.
         """
-        ctx_ids = self._llm.tokenize(context.encode("utf-8"), add_bos=False, special=True)
-        cont_ids = self._llm.tokenize(continuation.encode("utf-8"), add_bos=False, special=True)
+        whole_ids = self._llm.tokenize(
+            (context + continuation).encode("utf-8"), add_bos=False, special=True
+        )
+        ctx_only_ids = self._llm.tokenize(
+            context.encode("utf-8"), add_bos=False, special=True
+        )
+        # The continuation tokens are the suffix of the joint tokenization
+        # that follows the context-prefix. Use the length of the standalone
+        # ctx tokenization as the split index — this is the same heuristic
+        # TemplateLM._encode_pair uses in v0.4.9.2.
+        ctx_len = len(ctx_only_ids)
+        if ctx_len > len(whole_ids):
+            # Pathological: tokenizing (ctx+cont) jointly produced FEWER
+            # tokens than tokenizing ctx alone. Can happen if the boundary
+            # creates a special token. Fall back to the joint sequence with
+            # an empty cont; the caller will treat it as no-op (0.0).
+            return whole_ids, []
+        ctx_ids = whole_ids[:ctx_len]
+        cont_ids = whole_ids[ctx_len:]
+
         full_len = len(ctx_ids) + len(cont_ids)
         if full_len > self._max_length:
             overflow = full_len - self._max_length
@@ -344,26 +377,39 @@ class GGUFLocal(LM):
 
         for req in iterator:
             ctx, cont = req.args
-            # Tokenize cont eagerly (cheap) so we can keep all the state
-            # in pending_conts. We also need to know whether the ctx string
-            # matches the pending one — string equality before tokenization
-            # avoids tokenizing each ctx repeatedly.
+            # Joint tokenization is required for BPE word-boundary correctness
+            # (see _tokenize_request docstring). We can't tokenize cont alone
+            # and concatenate — that produces different token IDs at the
+            # boundary and shifts logprobs measurably. So we re-tokenize the
+            # joined string per request, but skip the costly ctx-eval when
+            # the ctx string matches the pending one.
+            ctx_ids, cont_ids = self._tokenize_request(ctx, cont)
+            if not cont_ids:
+                # Empty cont (rare, see pathological branch in _tokenize_request).
+                # Flush any pending and emit a no-op score.
+                flush()
+                out.append((0.0, True))
+                continue
             if ctx != pending_ctx_str:
                 flush()
                 pending_ctx_str = ctx
-                pending_ctx_ids, _ = self._tokenize_request(ctx, "")
-            cont_ids = self._llm.tokenize(cont.encode("utf-8"), add_bos=False, special=True)
-            # If this single (ctx + cont) would overflow max_length, fall back
-            # to the legacy path for this one request to keep the truncation
-            # logic in _tokenize_request authoritative. Rare for chat-template
-            # prompts at n_ctx=2048.
-            if pending_ctx_ids is not None and len(pending_ctx_ids) + len(cont_ids) > self._max_length:
+                pending_ctx_ids = ctx_ids
+            elif len(ctx_ids) != len(pending_ctx_ids or []):
+                # Same ctx string but different ctx token count after joint
+                # tokenization — can happen if the cont starts with a char that
+                # shifts the boundary tokenization. Flush and start fresh so
+                # the cached ctx_ids matches what cont_ids was carved from.
                 flush()
-                ctx_ids_trunc, cont_ids_trunc = self._tokenize_request(ctx, cont)
-                if not cont_ids_trunc:
-                    out.append((0.0, True))
-                else:
-                    out.append(self._score_one_legacy(ctx_ids_trunc, cont_ids_trunc))
+                pending_ctx_str = ctx
+                pending_ctx_ids = ctx_ids
+            # If a single (ctx + cont) overflows max_length, _tokenize_request
+            # has already truncated ctx from the left; we still need to ensure
+            # the cached ctx_ids is consistent with the newly-truncated one.
+            # Easiest correct path: drop into legacy for the truncated case.
+            if pending_ctx_ids is not None and len(pending_ctx_ids) + len(cont_ids) > self._max_length:
+                # Should not happen given _tokenize_request truncated, but defensive.
+                flush()
+                out.append(self._score_one_legacy(ctx_ids, cont_ids))
                 continue
             pending_conts.append(cont_ids)
 
