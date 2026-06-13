@@ -389,12 +389,25 @@ class GGUFLocal(LM):
         # produced the prompts. Fall back to the GGUF path so it never crashes.
         return self._tokenizer_repo or self._pretrained
 
-    @property
-    def chat_template(self) -> str | None:
-        # lm-eval inspects this to decide whether the model "has" a chat
-        # template at all. Returning the HF tokenizer's template string makes
-        # the framework's "instruct/chat variant" detection happy and gives
-        # the run-config record a canonical reference of what was applied.
+    def chat_template(self, chat_template: bool | str = False) -> str | None:
+        """Return the chat-template string lm-eval should record / apply.
+
+        Signature matches LM base class in lm_eval/api/model.py: a METHOD (not
+        a property) accepting an optional bool/str argument. lm-eval calls it
+        as `lm.chat_template(apply_chat_template_arg)` from
+        evaluator.simple_evaluate to log which template was applied.
+
+        - If apply_chat_template was disabled at the CLI, lm-eval passes
+          False and we return None (consistent with "no template").
+        - If enabled (True or a name), we return the HF tokenizer's template
+          string when a tokenizer_repo was configured; otherwise None.
+
+        We don't differentiate by `chat_template` value (True vs a named
+        template) — we always use the HF tokenizer's default template,
+        which is what Kurt 2026 §3.1 specifies.
+        """
+        if not chat_template:
+            return None
         if self._hf_tokenizer is None:
             return None
         return getattr(self._hf_tokenizer, "chat_template", None)

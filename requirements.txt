@@ -16,3 +16,8 @@ nltk>=3.9,<4.0
 transformers>=4.45,<5.0
 tokenizers>=0.20,<1.0
 jinja2>=3.1,<4.0
+# protobuf: required by transformers' SentencePiece path for Mistral-v0.3's
+# tokenizer (slow tokenizer fallback). Llama-3.1 (BPE) and Qwen3 (BPE) don't
+# need it, but Mistral does. Without it, AutoTokenizer.from_pretrained(mistral)
+# raises ImportError mid-run.
+protobuf>=4.25,<6.0
