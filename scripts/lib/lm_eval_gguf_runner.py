@@ -308,16 +308,20 @@ class GGUFLocal(LM):
         """Greedy-generate from `context` until any of `until` appears in the suffix
         or `max_new_tokens` is reached.
 
-        Uses llama-cpp-python's create_completion in non-streaming mode with
-        temperature=0 (greedy) so output is deterministic. The `stop` parameter
-        of llama-cpp-python is honoured server-side, but we also defensively
-        truncate the result on each `until` token after the fact in case the
-        model emitted a stop string mid-token (rare but possible with BPE).
+        Tokenises the prompt ourselves with `add_bos=False, special=True` so the
+        chat-template's leading BOS (e.g. <|begin_of_text|> for Llama-3.1) is
+        recognised as a single special token instead of being doubled by
+        llama-cpp-python's create_completion (which auto-prepends BOS by
+        default and emits the "Detected duplicate leading <|begin_of_text|>"
+        warning, degrading IFEval / GSM8K generation quality).
+
+        Generation runs greedy (temperature=0) per the project's spec §4.4.
         """
-        # llama-cpp-python's `stop` accepts a list of strings; pass the same list.
-        # Empty stops list is fine.
+        prompt_tokens = self._llm.tokenize(
+            context.encode("utf-8"), add_bos=False, special=True
+        )
         out = self._llm.create_completion(
-            prompt=context,
+            prompt=prompt_tokens,
             max_tokens=max_new_tokens,
             temperature=0.0,
             top_k=1,
