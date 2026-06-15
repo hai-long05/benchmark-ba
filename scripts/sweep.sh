@@ -45,7 +45,7 @@ done
 # 2. Accuracy + ctx=512 perf, in parallel.
 echo "==> accuracy slots (ctx=512), parallel=$JOBS"
 export HF_ID TASKS_CSV LLAMA_CPP_DIR LM_EVAL_LIMIT LM_EVAL_N_CTX LM_EVAL_BATCH LM_EVAL_N_THREADS \
-       TOKENIZER_REPO CHAT_TEMPLATE_KWARGS
+       TOKENIZER_REPO CHAT_TEMPLATE_KWARGS BENCH_THREADS BENCH_NUMA KURT_GGUFS_DIR
 
 if command -v parallel >/dev/null 2>&1 && [ "$JOBS" -gt 1 ]; then
   printf '%s\n' "${SCHEMES[@]}" | parallel -j "$JOBS" --halt soon,fail=1 \
@@ -56,6 +56,8 @@ if command -v parallel >/dev/null 2>&1 && [ "$JOBS" -gt 1 ]; then
      LM_EVAL_N_THREADS='${LM_EVAL_N_THREADS:-}' \
      TOKENIZER_REPO='${TOKENIZER_REPO:-}' \
      CHAT_TEMPLATE_KWARGS='${CHAT_TEMPLATE_KWARGS:-}' \
+     BENCH_THREADS='${BENCH_THREADS:-}' \
+     KURT_GGUFS_DIR='${KURT_GGUFS_DIR:-}' \
      ./scripts/run_slot.sh '$HF_ID' {} 512 3 '$TASKS_CSV'"
 else
   for SCHEME in "${SCHEMES[@]}"; do
