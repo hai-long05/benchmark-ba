@@ -22,12 +22,26 @@ BENCH_BIN="$LLAMA_CPP_DIR/build/bin/llama-bench"
 # Override with N_GEN env var only for diagnostic/exploratory runs.
 TG_N="${N_GEN:-128}"
 
+# Threads per llama-bench invocation. Default: 12 — this matches the per-slot
+# thread budget used during the parallel-8 sweep on a 96-core box (8×12=96,
+# no over-subscription). For the documented "single-slot Kurt-comparable"
+# bench, set BENCH_THREADS=96 in env and run sequentially.
+BENCH_THREADS="${BENCH_THREADS:-12}"
+
+# NUMA mode for llama-bench. 'distribute' spreads weights across both sockets
+# evenly — the safe default for multi-slot parallel benches on dual-socket
+# servers. Override via BENCH_NUMA=isolate or BENCH_NUMA=numactl if needed.
+BENCH_NUMA="${BENCH_NUMA:-distribute}"
+
 mkdir -p "$OUT_DIR/bench_raw"
 
 # Run llama-bench REPEATS times. Each invocation does one pp + one tg sample (with -r 1).
 for i in $(seq 1 "$REPEATS"); do
   raw="$OUT_DIR/bench_raw/run-$i.json"
-  "$BENCH_BIN" -m "$GGUF" -p "$CTX" -n "$TG_N" -r 1 -o json > "$raw"
+  "$BENCH_BIN" -m "$GGUF" -p "$CTX" -n "$TG_N" -r 1 \
+    --threads "$BENCH_THREADS" \
+    --numa "$BENCH_NUMA" \
+    -o json > "$raw"
 done
 
 # Concatenate all rows from each run into a single array, then aggregate.
