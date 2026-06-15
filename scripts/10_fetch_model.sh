@@ -48,11 +48,19 @@ fi
 # from HF + converting locally. Replicates Kurt 2026 §3.1 with bit-identical
 # weights from his open-source release at huggingface.co/uygarkurt/...-GGUF.
 if [ -n "$KURT_GGUFS_DIR" ]; then
-  # Find the FP16 file in Kurt's directory. Common names: *fp16*.gguf, *FP16*.gguf, *f16*.gguf.
-  KURT_FP16=$(find "$KURT_GGUFS_DIR" -maxdepth 2 -type f \
-    \( -iname '*fp16*.gguf' -o -iname '*f16*.gguf' \) 2>/dev/null | head -1)
+  # Find Kurt's FP16 baseline GGUF. Kurt's HF release names it just
+  # "Llama-3.1-8B-Instruct.gguf" (no fp16/f16 suffix), with quantized variants
+  # named "Llama-3.1-8B-Instruct_qN_*.gguf". So the FP16 baseline is the GGUF
+  # whose name has NO underscore-q quant suffix.
+  KURT_FP16=$(find "$KURT_GGUFS_DIR" -maxdepth 2 -type f -iname '*.gguf' 2>/dev/null \
+    | grep -iv '_q[0-9]' | head -1)
   if [ -z "$KURT_FP16" ]; then
-    echo "ERROR: KURT_GGUFS_DIR=$KURT_GGUFS_DIR set but no fp16/f16 GGUF found there" >&2
+    # Fallback: explicit fp16 / f16 name patterns (in case future releases use them)
+    KURT_FP16=$(find "$KURT_GGUFS_DIR" -maxdepth 2 -type f \
+      \( -iname '*fp16*.gguf' -o -iname '*f16*.gguf' \) 2>/dev/null | head -1)
+  fi
+  if [ -z "$KURT_FP16" ]; then
+    echo "ERROR: KURT_GGUFS_DIR=$KURT_GGUFS_DIR set but no FP16 baseline GGUF found there" >&2
     exit 1
   fi
   echo "using Kurt's FP16 GGUF: $KURT_FP16"

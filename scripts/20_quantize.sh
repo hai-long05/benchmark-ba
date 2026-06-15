@@ -64,8 +64,18 @@ rm -f "$OUT_GGUF" "$OUT_SHA" "$OUT_META"
 # KURT_GGUFS_DIR override: copy Kurt's published quantized GGUF instead of
 # producing one locally. Replicates Kurt 2026 bit-exactly.
 if [ -n "$KURT_GGUFS_DIR" ]; then
-  KURT_QUANT=$(find "$KURT_GGUFS_DIR" -maxdepth 2 -type f -iname "*${SCHEME}*.gguf" 2>/dev/null \
-    | grep -v -i 'fp16\|f16' | head -1)
+  # Match files containing the scheme name (e.g. "q4_k_s") preceded by an
+  # underscore. Kurt's naming convention: Llama-3.1-8B-Instruct_q4_k_s.gguf.
+  # We use _<scheme>.gguf as anchor to avoid accidentally matching the FP16
+  # baseline (Llama-3.1-8B-Instruct.gguf — no quant suffix).
+  scheme_lower_pat=$(echo "$SCHEME" | tr '[:upper:]' '[:lower:]')
+  KURT_QUANT=$(find "$KURT_GGUFS_DIR" -maxdepth 2 -type f -iname "*_${scheme_lower_pat}.gguf" 2>/dev/null | head -1)
+  if [ -z "$KURT_QUANT" ]; then
+    # Fallback: glob with scheme anywhere in the filename, but exclude the
+    # FP16 baseline (any GGUF whose name has no _q[0-9] segment).
+    KURT_QUANT=$(find "$KURT_GGUFS_DIR" -maxdepth 2 -type f -iname "*${SCHEME}*.gguf" 2>/dev/null \
+      | grep -i '_q[0-9]' | head -1)
+  fi
   if [ -z "$KURT_QUANT" ]; then
     echo "ERROR: KURT_GGUFS_DIR=$KURT_GGUFS_DIR set but no GGUF matching scheme '$SCHEME' found" >&2
     exit 1
