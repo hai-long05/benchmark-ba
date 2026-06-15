@@ -64,12 +64,18 @@ else
 fi
 
 # 3. Performance-only at ctx=2048 (skip lm_eval — accuracy is ctx-independent).
-echo "==> perf-only slots (ctx=2048), parallel=$JOBS"
-if command -v parallel >/dev/null 2>&1 && [ "$JOBS" -gt 1 ]; then
+# Set SKIP_CTX2048_PERF=1 to skip this phase entirely (e.g. when SF3 / H3
+# context-length-scaling is dropped from the thesis scope and only Kurt's
+# default ctx=512 perf is reported).
+if [ "${SKIP_CTX2048_PERF:-0}" = "1" ]; then
+  echo "==> SKIP_CTX2048_PERF=1 — skipping ctx=2048 perf-only phase"
+elif command -v parallel >/dev/null 2>&1 && [ "$JOBS" -gt 1 ]; then
+  echo "==> perf-only slots (ctx=2048), parallel=$JOBS"
   printf '%s\n' "${SCHEMES[@]}" | parallel -j "$JOBS" --halt soon,fail=1 \
     "PERF_ONLY=1 LLAMA_CPP_DIR='${LLAMA_CPP_DIR:-../llama.cpp}' \
      ./scripts/run_slot.sh '$HF_ID' {} 2048 3 '$TASKS_CSV'"
 else
+  echo "==> perf-only slots (ctx=2048), sequential"
   for SCHEME in "${SCHEMES[@]}"; do
     PERF_ONLY=1 ./scripts/run_slot.sh "$HF_ID" "$SCHEME" 2048 3 "$TASKS_CSV"
   done
