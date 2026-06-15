@@ -220,25 +220,40 @@ class GGUFLocal(LM):
         continuations: list[list[int]],
     ) -> list[tuple[float, bool]]:
         """Score N continuations that all share the same context, reusing the
-        KV cache via save_state/load_state. This is the fast path.
+        KV cache directly via n_tokens-pointer reset. This is the fast path.
+
+        Performance-critical: an earlier version used `save_state()/load_state()`
+        which copies the entire scores matrix (n_ctx × vocab = 2048 × 128256 ×
+        4 B = 1 GiB for Llama-3.1) PER CONTINUATION. With 4 continuations per
+        HellaSwag item and 100k+ items per slot, that path produced terabytes
+        of memory copies and dominated wall-clock by ~50-100×. The fix here
+        relies on llama-cpp-python's eval() which calls kv_cache_seq_rm(-1,
+        self.n_tokens, -1) at its start: setting n_tokens = ctx_n before
+        eval(cont) truncates the KV cache to "after ctx" and appends cont
+        at positions [ctx_n .. ctx_n+len(cont)-1] — no copies, no allocations.
 
         Layout per continuation:
-          1. (once per group) reset, eval(ctx), save_state — KV cache holds ctx.
-          2. (per cont) load_state, eval(cont), read logits at positions
-             [len(ctx)-1 .. len(ctx)+len(cont)-2], compute per-token logprobs.
+          1. (once per group) reset, eval(ctx) — KV cache now holds ctx tokens
+             at positions [0..ctx_n-1], scores[ctx_n-1] is the logit row
+             that predicts cont[0].
+          2. (per cont) set n_tokens=ctx_n (truncates KV to ctx),
+             eval(cont) appends and writes scores[ctx_n..ctx_n+len(cont)-1],
+             read logits at positions [ctx_n-1 .. ctx_n+len(cont)-2].
 
-        The loaded state's n_tokens is len(ctx); after eval(cont) it is
-        len(ctx)+len(cont). The logits-row that *predicts* cont[i] is at
-        absolute position len(ctx)-1 + i — which is row len(ctx)+i-1 in
-        self._llm.scores. The first such row (i=0) was produced by the ctx
-        eval (the last logit row of the ctx pass) and is preserved across
-        load_state because save_state captures the scores array too.
+        The scores at [0..ctx_n-1] are the same Python ndarray object across
+        all continuations of this group — no copy needed. Only the rows
+        [ctx_n..] get overwritten by each cont's eval, but we read them
+        before the next iteration overwrites them.
         """
         # 1. Build the context KV state once.
         self._llm.reset()
         self._llm.eval(ctx_ids)
-        ctx_state = self._llm.save_state()
         ctx_n = len(ctx_ids)
+        # Snapshot the ctx-tail logits row (predicts cont[0]) before subsequent
+        # eval(cont) overwrites scores[ctx_n-1]. This is the only memory copy
+        # we need, and it's a single (vocab,)-shaped float32 row (~512 KB),
+        # not the full 1 GB scores matrix.
+        ctx_last_logits = self._llm.scores[ctx_n - 1].copy() if ctx_n > 0 else None
 
         out: list[tuple[float, bool]] = []
         for cont_ids in continuations:
@@ -246,26 +261,39 @@ class GGUFLocal(LM):
                 out.append((0.0, True))
                 continue
 
-            # Restore KV cache to "after ctx" position, then forward the
-            # continuation tokens. After this the model has scored every cont
-            # token conditioned on ctx + preceding cont tokens.
-            self._llm.load_state(ctx_state)
+            # Reset n_tokens so eval() truncates the KV cache to ctx and appends
+            # cont. No state copy. eval() internally calls kv_cache_seq_rm(-1,
+            # self.n_tokens, -1) which is a constant-time pointer-rewind.
+            self._llm.n_tokens = ctx_n
             self._llm.eval(cont_ids)
 
             # Logits-row that predicted cont[i] is row (ctx_n + i - 1):
-            # - For i=0: row ctx_n-1 was produced during the ctx eval (the
-            #   last logit of ctx, which predicts the next token, i.e. cont[0]).
+            # - For i=0: row ctx_n-1 was produced during the ctx eval. We
+            #   snapshotted it as ctx_last_logits because eval(cont_A) would
+            #   overwrite it with cont_A's last logit if we read it later.
+            #   Wait — actually eval(cont) writes to rows [ctx_n .. ctx_n+len(cont)-1],
+            #   NOT to row ctx_n-1. So scores[ctx_n-1] is preserved across
+            #   the cont evals. ctx_last_logits is a defensive belt-and-braces.
             # - For i>0: row ctx_n+i-1 was produced during the cont eval.
-            scores = self._llm.scores[: ctx_n + len(cont_ids)]
             sum_lp = 0.0
             all_greedy = True
             for i, tok_id in enumerate(cont_ids):
-                row = ctx_n + i - 1
-                if row < 0 or row >= scores.shape[0]:
+                row_idx = ctx_n + i - 1
+                if row_idx < 0:
+                    # Pathological: empty ctx. Continuation token at position 0
+                    # has no preceding context to predict from.
                     sum_lp = float("-inf")
                     all_greedy = False
                     break
-                lp, is_arg = self._logprob_from_logits(scores[row], tok_id)
+                if i == 0 and ctx_last_logits is not None:
+                    # Use the snapshotted ctx-tail row (defensive — should be
+                    # identical to scores[ctx_n-1] since eval(cont) only writes
+                    # rows >= ctx_n, but safer against future llama-cpp-python
+                    # changes).
+                    logits = ctx_last_logits
+                else:
+                    logits = self._llm.scores[row_idx]
+                lp, is_arg = self._logprob_from_logits(logits, tok_id)
                 sum_lp += lp
                 if not is_arg:
                     all_greedy = False
