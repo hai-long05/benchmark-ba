@@ -1,0 +1,19 @@
+==> sweep: model=meta-llama/Llama-3.1-8B-Instruct, 14 configs, tasks=hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2, jobs=8
+==> warm-up: fetch + quantize
+model already present and verified: models/meta-llama_llama-3.1-8b-instruct-fp16.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q3_k_s.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q3_k_m.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q3_k_l.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q4_0.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q4_1.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q4_k_m.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q5_0.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q5_1.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q5_k_s.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q5_k_m.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q6_k.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q8_0.gguf
+==> accuracy slots (ctx=512), parallel=8
+./scripts/sweep.sh: line 64: 1445480 Done                       printf '%s\n' "${SCHEMES[@]}"
+     1445481 Killed                     | parallel -j "$JOBS" --halt soon,fail=1 "LLAMA_CPP_DIR='${LLAMA_CPP_DIR:-../llama.cpp}'      LM_EVAL_LIMIT='${LM_EVAL_LIMIT:-}'      LM_EVAL_N_CTX='${LM_EVAL_N_CTX:-2048}'      LM_EVAL_BATCH='${LM_EVAL_BATCH:-1}'      LM_EVAL_N_THREADS='${LM_EVAL_N_THREADS:-}'      TOKENIZER_REPO='${TOKENIZER_REPO:-}'      CHAT_TEMPLATE_KWARGS='${CHAT_TEMPLATE_KWARGS:-}'      ./scripts/run_slot.sh '$HF_ID' {} 512 3 '$TASKS_CSV'"

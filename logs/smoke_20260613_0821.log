@@ -1,0 +1,31 @@
+==> fetch model
+model already present and verified: models/meta-llama_llama-3.1-8b-instruct-fp16.gguf
+==> quantize
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf
+wrote results/2026-06-13T08-21-45Z-meta-llama_llama-3.1-8b-instruct-q4_k_s-ctx512/slot.json
+==> bench
+bench: pp=220.093694 tok/s, tg=34.53902 tok/s, 2 warnings
+==> lm_eval (tasks: hellaswag,ifeval)
+==> lm_eval (n_fewshot=0, chat_template=1, tasks: hellaswag,ifeval)
+2026-06-13:08:22:21 WARNING  [__main__:369]  --limit SHOULD ONLY BE USED FOR TESTING.REAL METRICS SHOULD NOT BE COMPUTED USING LIMIT.
+2026-06-13:08:22:21 INFO     [__main__:465] Selected Tasks: ['hellaswag', 'ifeval']
+2026-06-13:08:22:21 INFO     [evaluator:202] Setting random seed to 0 | Setting numpy seed to 1234 | Setting torch manual seed to 1234 | Setting fewshot manual seed to 1234
+2026-06-13:08:22:21 INFO     [evaluator:240] Initializing gguf_local model, with arguments: {'pretrained':
+        '/home/hai.long.do/benchmark-ba/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf', 'n_ctx': 2048, 'verbose': False,
+        'n_threads': 88, 'tokenizer_repo': 'meta-llama/Llama-3.1-8B-Instruct'}
+llama_context: n_ctx_seq (2048) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
+2026-06-13:08:22:28 INFO     [tasks:695] Selected tasks:
+2026-06-13:08:22:28 INFO     [tasks:686] Task: ifeval (ifeval/ifeval.yaml)
+2026-06-13:08:22:28 INFO     [tasks:686] Task: hellaswag (hellaswag/hellaswag.yaml)
+2026-06-13:08:22:28 INFO     [evaluator:305] ifeval: Using gen_kwargs: {'until': [], 'do_sample': False, 'temperature': 0.0, 'max_gen_toks': 1280}
+2026-06-13:08:22:28 INFO     [evaluator:320] num_fewshot has been set to 0 for ifeval in its config. Manual configuration will be ignored.
+2026-06-13:08:22:28 WARNING  [evaluator:324] Overwriting default num_fewshot of hellaswag from None to 0
+2026-06-13:08:22:28 WARNING  [evaluator:480] Chat template formatting change affects loglikelihood and multiple-choice tasks. See docs/chat-template-readme.md for details.
+2026-06-13:08:22:28 INFO     [api.task:434] Building contexts for ifeval on rank 0...
+  0%|          | 0/200 [00:00<?, ?it/s]100%|██████████| 200/200 [00:00<00:00, 13191.09it/s]
+2026-06-13:08:22:28 INFO     [api.task:434] Building contexts for hellaswag on rank 0...
+  0%|          | 0/200 [00:00<?, ?it/s]100%|██████████| 200/200 [00:00<00:00, 4140.48it/s]
+2026-06-13:08:22:28 INFO     [evaluator:574] Running generate_until requests
+generate_until (gguf_local):   0%|          | 0/200 [00:00<?, ?it/s]/home/hai.long.do/benchmark-ba/.venv/lib/python3.14/site-packages/llama_cpp/llama.py:1291: RuntimeWarning: Detected duplicate leading "<|begin_of_text|>" in prompt, this will likely reduce response quality, consider removing it...
+  warnings.warn(
+generate_until (gguf_local):   0%|          | 1/200 [00:25<1:23:59, 25.32s/it]generate_until (gguf_local):   1%|          | 2/200 [00:48<1:19:40, 24.14s/it]generate_until (gguf_local):   2%|▏         | 3/200 [01:17<1:26:40, 26.40s/it]generate_until (gguf_local):   2%|▏         | 4/200 [01:37<1:17:28, 23.72s/it]generate_until (gguf_local):   2%|▎         | 5/200 [01:53<1:07:53, 20.89s/it]generate_until (gguf_local):   3%|▎         | 6/200 [02:20<1:14:25, 23.02s/it]generate_until (gguf_local):   4%|▎         | 7/200 [02:45<1:16:32, 23.80s/it]generate_until (gguf_local):   4%|▍         | 8/200 [03:10<1:17:31, 24.23s/it]generate_until (gguf_local):   4%|▍         | 9/200 [03:32<1:14:08, 23.29s/it]generate_until (gguf_local):   5%|▌         | 10/200 [04:03<1:21:37, 25.77s/it]generate_until (gguf_local):   6%|▌         | 11/200 [04:40<1:32:03, 29.23s/it]generate_until (gguf_local):   6%|▌         | 12/200 [05:38<1:58:54, 37.95s/it]generate_until (gguf_local):   6%|▋         | 13/200 [06:02<1:45:36, 33.88s/it]generate_until (gguf_local):   7%|▋         | 14/200 [06:37<1:46:05, 34.22s/it]generate_until (gguf_local):   8%|▊         | 15/200 [07:02<1:36:21, 31.25s/it]generate_until (gguf_local):   8%|▊         | 16/200 [07:24<1:27:03, 28.39s/it]generate_until (gguf_local):   8%|▊         | 17/200 [07:39<1:14:52, 24.55s/it]generate_until (gguf_local):   9%|▉         | 18/200 [07:56<1:07:02, 22.10s/it]generate_until (gguf_local):  10%|▉         | 19/200 [08:27<1:14:43, 24.77s/it]generate_until (gguf_local):  10%|█         | 20/200 [08:43<1:07:15, 22.42s/it]generate_until (gguf_local):  10%|█         | 21/200 [09:05<1:05:42, 22.02s/it]generate_until (gguf_local):  11%|█         | 22/200 [09:22<1:01:14, 20.65s/it]generate_until (gguf_local):  12%|█▏        | 23/200 [09:32<51:53, 17.59s/it]  generate_until (gguf_local):  12%|█▏        | 24/200 [09:54<54:36, 18.62s/it]generate_until (gguf_local):  12%|█▎        | 25/200 [10:22<1:02:44, 21.51s/it]generate_until (gguf_local):  13%|█▎        | 26/200 [10:46<1:04:37, 22.29s/it]generate_until (gguf_local):  14%|█▎        | 27/200 [11:12<1:07:17, 23.34s/it]generate_until (gguf_local):  14%|█▍        | 28/200 [11:28<1:00:59, 21.28s/it]generate_until (gguf_local):  14%|█▍        | 29/200 [11:46<57:42, 20.25s/it]  generate_until (gguf_local):  15%|█▌        | 30/200 [12:07<57:44, 20.38s/it]generate_until (gguf_local):  16%|█▌        | 31/200 [12:28<57:59, 20.59s/it]generate_until (gguf_local):  16%|█▌        | 32/200 [13:26<1:29:21, 31.92s/it]generate_until (gguf_local):  16%|█▋        | 33/200 [13:43<1:16:22, 27.44s/it]generate_until (gguf_local):  17%|█▋        | 34/200 [14:08<1:13:37, 26.61s/it]generate_until (gguf_local):  18%|█▊        | 35/200 [14:30<1:09:46, 25.37s/it]generate_until (gguf_local):  18%|█▊        | 36/200 [14:47<1:01:54, 22.65s/it]generate_until (gguf_local):  18%|█▊        | 37/200 [15:27<1:15:49, 27.91s/it]generate_until (gguf_local):  19%|█▉        | 38/200 [16:18<1:34:14, 34.90s/it]generate_until (gguf_local):  20%|█▉        | 39/200 [16:39<1:22:08, 30.61s/it]generate_until (gguf_local):  20%|██        | 40/200 [17:07<1:20:07, 30.04s/it]

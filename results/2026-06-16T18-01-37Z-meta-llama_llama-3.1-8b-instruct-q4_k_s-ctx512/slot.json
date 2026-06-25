@@ -1,0 +1,40 @@
+{
+  "run_id": "2026-06-16T18-01-37Z-meta-llama_llama-3.1-8b-instruct-q4_k_s-ctx512",
+  "model": {
+    "name": "Llama-3.1-8B-Instruct",
+    "hf_id": "meta-llama/Llama-3.1-8B-Instruct",
+    "fp16_sha256": "16656f2a6fe5cb2770edb8c4cb9b2887179e3566c2872c70e5091bf1db127a0e"
+  },
+  "quant": {
+    "scheme": "Q4_K_S",
+    "gguf_sha256": "5aaae5376378352801e97ea29f5ab941c2df23a808c8671a68444280537b50ea",
+    "size_mib": 4475.28,
+    "size_reduction_pct": 70.8,
+    "quant_time_s": 0
+  },
+  "ctx": 512,
+  "repeats": 3,
+  "host_id": "6dbc1e564b6dccb9734fcde74362ec32a95b93809cf7a064c3afc6a3bed883b3",
+  "llama_cpp_commit": "be47fb9285779e900915bd8246eb9664110d4ba5",
+  "lm_eval_version": "0.4.9.2",
+  "tasks_requested": [
+    "hellaswag",
+    "gsm8k",
+    "ifeval",
+    "truthfulqa_mc2"
+  ],
+  "perf_only": false,
+  "chat_template": {
+    "tokenizer_repo": "meta-llama/Llama-3.1-8B-Instruct",
+    "chat_template_kwargs": null,
+    "applied_to": [
+      "gsm8k",
+      "ifeval"
+    ],
+    "skipped_for": [
+      "hellaswag",
+      "truthfulqa_mc2"
+    ],
+    "fewshot_as_multiturn": true
+  }
+}

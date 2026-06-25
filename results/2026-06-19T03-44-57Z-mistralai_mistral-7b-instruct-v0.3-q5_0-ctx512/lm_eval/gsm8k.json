@@ -1,0 +1,32 @@
+{
+  "results": {
+    "gsm8k": {
+      "alias": "gsm8k",
+      "exact_match,strict-match": 0.4890068233510235,
+      "exact_match_stderr,strict-match": 0.013769155509690904,
+      "exact_match,flexible-extract": 0.4988627748294162,
+      "exact_match_stderr,flexible-extract": 0.013772449096346836
+    }
+  },
+  "versions": {
+    "gsm8k": 3.0
+  },
+  "n-shot": {
+    "gsm8k": 5
+  },
+  "config": {
+    "model": "gguf_local",
+    "model_args": "pretrained=/home/hai.long.do/benchmark-ba/quantized/mistralai_mistral-7b-instruct-v0.3-q5_0.gguf,n_ctx=4096,verbose=False,n_threads=96,tokenizer_repo=mistralai/Mistral-7B-Instruct-v0.3",
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": null,
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": null,
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  }
+}

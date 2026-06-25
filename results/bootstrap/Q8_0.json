@@ -1,0 +1,81 @@
+{
+  "baseline": {
+    "model": "Mistral-7B-Instruct-v0.3",
+    "scheme": "F16",
+    "ctx": 512,
+    "run_id": "2026-06-17T13-33-45Z-mistralai_mistral-7b-instruct-v0.3-f16-ctx512"
+  },
+  "quant": {
+    "model": "Mistral-7B-Instruct-v0.3",
+    "scheme": "Q8_0",
+    "ctx": 512,
+    "run_id": "2026-06-20T03-57-55Z-mistralai_mistral-7b-instruct-v0.3-q8_0-ctx512"
+  },
+  "seed": 3134066861,
+  "b": 10000,
+  "tasks": {
+    "hellaswag": {
+      "point_fp16": 0.8293168691495718,
+      "point_quant": 0.8283210515833499,
+      "delta": -0.0009958175662219126,
+      "ci_low": -0.0019916351324438253,
+      "ci_high": 0.0,
+      "n_items": 10042,
+      "b": 10000,
+      "task": "hellaswag",
+      "task_kind": "lm",
+      "metric_keys": [
+        "acc_norm"
+      ],
+      "contains_zero": true
+    },
+    "gsm8k": {
+      "point_fp16": 0.4935557240333586,
+      "point_quant": 0.48673237300985595,
+      "delta": -0.006823351023502677,
+      "ci_low": -0.019711902956785377,
+      "ci_high": 0.006065200909780133,
+      "n_items": 1319,
+      "b": 10000,
+      "task": "gsm8k",
+      "task_kind": "lm",
+      "metric_keys": [
+        "exact_match"
+      ],
+      "contains_zero": true
+    },
+    "ifeval": {
+      "point_fp16": 0.5616913123844732,
+      "point_quant": 0.5614602587800369,
+      "delta": -0.0002310536044363154,
+      "ci_low": -0.016712877387553785,
+      "ci_high": 0.01663585951940849,
+      "n_items": 541,
+      "b": 10000,
+      "task": "ifeval",
+      "task_kind": "ifeval",
+      "metric_keys": [
+        "inst_level_loose_acc",
+        "inst_level_strict_acc",
+        "prompt_level_loose_acc",
+        "prompt_level_strict_acc"
+      ],
+      "contains_zero": true
+    },
+    "truthfulqa_mc2": {
+      "point_fp16": 0.5969715146597284,
+      "point_quant": 0.5959655122189342,
+      "delta": -0.0010060024407941848,
+      "ci_low": -0.002061489485116358,
+      "ci_high": 1.2416227830502261e-05,
+      "n_items": 817,
+      "b": 10000,
+      "task": "truthfulqa_mc2",
+      "task_kind": "lm",
+      "metric_keys": [
+        "acc"
+      ],
+      "contains_zero": true
+    }
+  }
+}

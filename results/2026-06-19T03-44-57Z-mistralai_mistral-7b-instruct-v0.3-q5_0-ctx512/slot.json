@@ -1,0 +1,40 @@
+{
+  "run_id": "2026-06-19T03-44-57Z-mistralai_mistral-7b-instruct-v0.3-q5_0-ctx512",
+  "model": {
+    "name": "Mistral-7B-Instruct-v0.3",
+    "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+    "fp16_sha256": "11b7af641171505c203e25f0c9d70a88ca9d42d3693ff86f35d5ad88cb4d798a"
+  },
+  "quant": {
+    "scheme": "Q5_0",
+    "gguf_sha256": "75d56c10be8054ca488a42506f7ae0f5f00e40c75ace96bdf43abe41b985d03e",
+    "size_mib": 4770.74,
+    "size_reduction_pct": 65.49,
+    "quant_time_s": 8
+  },
+  "ctx": 512,
+  "repeats": 3,
+  "host_id": "6dbc1e564b6dccb9734fcde74362ec32a95b93809cf7a064c3afc6a3bed883b3",
+  "llama_cpp_commit": "be47fb9285779e900915bd8246eb9664110d4ba5",
+  "lm_eval_version": "0.4.9.2",
+  "tasks_requested": [
+    "hellaswag",
+    "gsm8k",
+    "ifeval",
+    "truthfulqa_mc2"
+  ],
+  "perf_only": false,
+  "chat_template": {
+    "tokenizer_repo": "mistralai/Mistral-7B-Instruct-v0.3",
+    "chat_template_kwargs": null,
+    "applied_to": [
+      "gsm8k",
+      "ifeval"
+    ],
+    "skipped_for": [
+      "hellaswag",
+      "truthfulqa_mc2"
+    ],
+    "fewshot_as_multiturn": true
+  }
+}

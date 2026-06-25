@@ -1,0 +1,36 @@
+{
+  "results": {
+    "ifeval": {
+      "alias": "ifeval",
+      "prompt_level_strict_acc,none": 0.4713493530499076,
+      "prompt_level_strict_acc_stderr,none": 0.02148122093008049,
+      "inst_level_strict_acc,none": 0.5743405275779376,
+      "inst_level_strict_acc_stderr,none": "N/A",
+      "prompt_level_loose_acc,none": 0.5027726432532348,
+      "prompt_level_loose_acc_stderr,none": 0.021516243323548144,
+      "inst_level_loose_acc,none": 0.6079136690647482,
+      "inst_level_loose_acc_stderr,none": "N/A"
+    }
+  },
+  "versions": {
+    "ifeval": 4.0
+  },
+  "n-shot": {
+    "ifeval": 0
+  },
+  "config": {
+    "model": "gguf_local",
+    "model_args": "pretrained=/home/hai.long.do/benchmark-ba/quantized/mistralai_mistral-7b-instruct-v0.3-q3_k_s.gguf,n_ctx=4096,verbose=False,n_threads=96,tokenizer_repo=mistralai/Mistral-7B-Instruct-v0.3",
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": null,
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": null,
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "results": {
+    "hellaswag": {
+      "alias": "hellaswag",
+      "acc,none": 0.5911173073093009,
+      "acc_stderr,none": 0.004906227902850411,
+      "acc_norm,none": 0.7869946225851424,
+      "acc_norm_stderr,none": 0.004085946564442383
+    }
+  },
+  "versions": {
+    "hellaswag": 1.0
+  },
+  "n-shot": {
+    "hellaswag": 0
+  },
+  "config": {
+    "model": "gguf_local",
+    "model_args": "pretrained=/home/hai.long.do/benchmark-ba/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf,n_ctx=512,verbose=False,n_threads=96",
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": null,
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": null,
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  }
+}

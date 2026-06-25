@@ -1,0 +1,6 @@
+==> sweep: model=meta-llama/Llama-3.1-8B-Instruct, 2 configs, tasks=hellaswag,truthfulqa_mc2, jobs=2
+==> warm-up: fetch + quantize
+model already present and verified: models/meta-llama_llama-3.1-8b-instruct-fp16.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf
+quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q5_0.gguf
+==> accuracy slots (ctx=512), parallel=2

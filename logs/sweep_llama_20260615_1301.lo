@@ -1,0 +1,2 @@
+==> sweep: model=meta-llama/Llama-3.1-8B-Instruct, 14 configs, tasks=hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2, jobs=1
+==> warm-up: fetch + quantize

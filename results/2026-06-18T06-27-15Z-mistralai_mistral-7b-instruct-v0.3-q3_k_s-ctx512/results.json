@@ -1,0 +1,62 @@
+{
+  "run_id": "2026-06-18T06-27-15Z-mistralai_mistral-7b-instruct-v0.3-q3_k_s-ctx512",
+  "model": "Mistral-7B-Instruct-v0.3",
+  "quant": "Q3_K_S",
+  "bits_nominal": 3,
+  "ctx": 512,
+  "size_mib": 3021.74,
+  "size_reduction_pct": 78.14,
+  "quant_time_s": 9,
+  "pp": {
+    "ctx": 512,
+    "median": 206.474061,
+    "iqr": 1.0114709999999718,
+    "samples": [
+      207.849792,
+      205.82685,
+      206.474061
+    ]
+  },
+  "tg": {
+    "median": 26.461377,
+    "iqr": 0.23738850000000156,
+    "samples": [
+      26.561965,
+      26.087188,
+      26.461377
+    ]
+  },
+  "tasks": {
+    "gsm8k": {
+      "exact_match_strict_match": 0.42153146322971946,
+      "exact_match_stderr_strict_match": 0.013601824409483269,
+      "exact_match_flexible_extract": 0.4245640636846095,
+      "exact_match_stderr_flexible_extract": 0.013614835574956373
+    },
+    "hellaswag": {
+      "acc": 0.6329416450906195,
+      "acc_stderr": 0.004810175357870933,
+      "acc_norm": 0.8163712407886875,
+      "acc_norm_stderr": 0.0038638985469419723
+    },
+    "ifeval": {
+      "prompt_level_strict_acc": 0.4713493530499076,
+      "prompt_level_strict_acc_stderr": 0.02148122093008049,
+      "inst_level_strict_acc": 0.5743405275779376,
+      "prompt_level_loose_acc": 0.5027726432532348,
+      "prompt_level_loose_acc_stderr": 0.021516243323548144,
+      "inst_level_loose_acc": 0.6079136690647482
+    },
+    "truthfulqa_mc2": {
+      "acc": 0.5752202386308254,
+      "acc_stderr": 0.01536420258926217
+    }
+  },
+  "ppl_wikitext2": null,
+  "env": {
+    "host_id": "6dbc1e564b6dccb9734fcde74362ec32a95b93809cf7a064c3afc6a3bed883b3",
+    "llama_cpp_commit": "be47fb9285779e900915bd8246eb9664110d4ba5",
+    "lm_eval_version": "0.4.9.2"
+  },
+  "warnings": []
+}

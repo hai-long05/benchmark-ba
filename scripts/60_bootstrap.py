@@ -60,9 +60,8 @@ import numpy as np
 TASK_METRIC_KEYS: dict[str, list[str]] = {
     # acc_norm: 1 if normalized loglikelihood ranks the gold continuation first.
     "hellaswag": ["acc_norm"],
-    # exact_match,flexible-extract: 1 if extracted answer matches gold.
-    # Harness stores the filtered metric under a comma-suffixed key.
-    "gsm8k": ["exact_match,flexible-extract"],
+    # exact_match: per-item binary score as stored in samples_gsm8k_*.jsonl
+    "gsm8k": ["exact_match"],
     # IFEval: four binary sub-metrics per prompt. Resampled jointly.
     "ifeval": [
         "inst_level_loose_acc",
@@ -176,7 +175,13 @@ def _build_pair(baseline_items: list[dict], quant_items: list[dict],
                 raise KeyError(
                     f"metric {mk!r} missing in sample doc_id={item.get('_pair_key')}"
                 )
-            out.append(float(v))
+            # inst_level_* keys store a list of bools (one per instruction);
+            # reduce to mean so the value is a scalar.
+            if isinstance(v, list):
+                v = float(np.mean([float(x) for x in v]))
+            else:
+                v = float(v)
+            out.append(v)
         return out
 
     base_mat = np.array([vec(base_by_key[k]) for k in common_keys])

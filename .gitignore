@@ -1,8 +1,8 @@
 # Generated artefacts
 models/
 quantized/
-results/
-env/
+# results/
+# env/
 docs/
 
 # Python

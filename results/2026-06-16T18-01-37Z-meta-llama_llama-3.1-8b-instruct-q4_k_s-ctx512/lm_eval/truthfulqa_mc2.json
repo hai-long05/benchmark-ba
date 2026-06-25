@@ -1,0 +1,30 @@
+{
+  "results": {
+    "truthfulqa_mc2": {
+      "alias": "truthfulqa_mc2",
+      "acc,none": 0.5172251079819425,
+      "acc_stderr,none": 0.014941293462635211
+    }
+  },
+  "versions": {
+    "truthfulqa_mc2": 3.0
+  },
+  "n-shot": {
+    "truthfulqa_mc2": 0
+  },
+  "config": {
+    "model": "gguf_local",
+    "model_args": "pretrained=/home/hai.long.do/benchmark-ba/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf,n_ctx=512,verbose=False,n_threads=96",
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": null,
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": null,
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "results": {
+    "ifeval": {
+      "alias": "ifeval",
+      "prompt_level_strict_acc,none": 0.7597042513863216,
+      "prompt_level_strict_acc_stderr,none": 0.018386473581487088,
+      "inst_level_strict_acc,none": 0.8225419664268585,
+      "inst_level_strict_acc_stderr,none": "N/A",
+      "prompt_level_loose_acc,none": 0.8022181146025879,
+      "prompt_level_loose_acc_stderr,none": 0.017141254719084894,
+      "inst_level_loose_acc,none": 0.8573141486810552,
+      "inst_level_loose_acc_stderr,none": "N/A"
+    }
+  },
+  "versions": {
+    "ifeval": 4.0
+  },
+  "n-shot": {
+    "ifeval": 0
+  },
+  "config": {
+    "model": "gguf_local",
+    "model_args": "pretrained=/home/hai.long.do/benchmark-ba/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf,n_ctx=4096,verbose=False,n_threads=96,tokenizer_repo=meta-llama/Llama-3.1-8B-Instruct",
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": null,
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": null,
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  }
+}
