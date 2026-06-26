@@ -1,0 +1,109 @@
+  194  tmux new -s sweep_llama
+  195  tmux attach -t sweep_llama
+  196  pgrep -af "parallel|run_slot|llama|python3.*lm_eval" | head -20
+  200  ls -la ~/benchmark-ba/logs/sweep_llama_*.log
+  201  tmux attach -t sweep_llama
+  203  tmux attach -t sweep_llama
+  206  tmux attach -t sweep_llama
+  208  tmux attach -t sweep_llama
+  236  tmux attach -t sweep_llama
+  238  pgrep -af "parallel|run_slot|llama-bench|python3.*lm_eval"
+  243  tmux new -s sweep_llama
+  244  tmux attach -t sweep_llama
+  258  LM_EVAL_N_THREADS=12   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048     ./scripts/sweep.sh meta-llama/Llama-3.1-8B-Instruct       hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2,wikitext       8     2>&1 | tee logs/sweep_llama_$(date +%Y%m%d_%H%M).log
+  263  LM_EVAL_N_THREADS=12   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048     ./scripts/sweep.sh meta-llama/Llama-3.1-8B-Instruct       hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2       8     2>&1 | tee logs/sweep_llama_$(date +%Y%m%d_%H%M).log
+  267  pkill -9 -f "parallel.*sweep|run_slot|llama-bench"
+  269  pgrep -af "parallel|run_slot|llama-bench|python3.*lm_eval"
+  271  tmux kill-session -t sweep_llama 2>/dev/null
+  277  grep -A2 "BENCH_THREADS" scripts/30_bench.sh | head -8
+  283  tmux new -s sweep_llama
+  287  LM_EVAL_N_THREADS=12   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048     ./scripts/sweep.sh meta-llama/Llama-3.1-8B-Instruct       hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2       8     2>&1 | tee logs/sweep_llama_$(date +%Y%m%d_%H%M).log
+  292  LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 LM_EVAL_LIMIT=200   ./scripts/run_slot.sh     meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3     hellaswag,gsm8k,ifeval,truthfulqa_mc2
+  352  grep -c "TOKENIZER_REPO" scripts/run_slot.sh
+  365  LM_EVAL_N_THREADS=88   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048   LM_EVAL_LIMIT=200     ./scripts/run_slot.sh       meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3       hellaswag,gsm8k,ifeval,truthfulqa_mc2     2>&1 | tee logs/smoke_$(date +%Y%m%d_%H%M).log
+  369  LM_EVAL_N_THREADS=88   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048   LM_EVAL_LIMIT=200     ./scripts/run_slot.sh       meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3       hellaswag,gsm8k,ifeval,truthfulqa_mc2     2>&1 | tee logs/smoke_$(date +%Y%m%d_%H%M).log
+  373  LM_EVAL_N_THREADS=88   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048   LM_EVAL_LIMIT=200     ./scripts/run_slot.sh       meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3       hellaswag,ifeval     2>&1 | tee logs/smoke_$(date +%Y%m%d_%H%M).log
+  376  LM_EVAL_N_THREADS=88   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048   LM_EVAL_LIMIT=200     ./scripts/run_slot.sh       meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3       hellaswag,ifeval     2>&1 | tee logs/smoke_$(date +%Y%m%d_%H%M).log
+  380  LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 LM_EVAL_LIMIT=200     ./scripts/run_slot.sh meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3       hellaswag,truthfulqa_mc2     2>&1 | tee logs/smoke_cached_$(date +%Y%m%d_%H%M).log
+  410  tmux attach -t sweep_llama
+  420  pkill -9 -f "parallel.*sweep|run_slot|llama-bench|python3.*lm_eval"
+  423  pgrep -af "parallel|run_slot|llama-bench|python3.*lm_eval"
+  426  tmux new -s sweep_llama
+  428  tmux kill-session -t sweep_llama
+  434  tmux new -s sweep_llama
+  437  tmux new -s sweep_llama
+  438  tmux attach -t sweep_llama
+  447  tmux attach -t sweep_llama
+  454  LM_EVAL_N_THREADS=48   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048   BENCH_THREADS=48     ./scripts/sweep.sh meta-llama/Llama-3.1-8B-Instruct       hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2       2     2>&1 | tee logs/sweep_llama_$(date +%Y%m%d_%H%M).log
+  456  pkill -9 -f "parallel.*sweep|run_slot|llama-bench|python3.*lm_eval"
+  458  pgrep -af "parallel|run_slot|llama-bench|python3.*lm_eval"
+  471  grep -A2 "SKIP_CTX2048_PERF" scripts/sweep.sh | head -10
+  479  grep "KURT_GGUFS_DIR" scripts/sweep.sh | head -3
+  485  KURT_GGUFS_DIR=$HOME/benchmark-ba/models/kurt_ggufs   LM_EVAL_N_THREADS=96   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048   BENCH_THREADS=96   SKIP_CTX2048_PERF=1     ./scripts/sweep.sh meta-llama/Llama-3.1-8B-Instruct       hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2       1     2>&1 | tee logs/sweep_llama_$(date +%Y%m%d_%H%M).log
+  487  pkill -9 -f "parallel.*sweep|run_slot|llama-bench|python3.*lm_eval"
+  519  tmux attach -t sweep_llama
+  550  pkill -9 -f "parallel.*sweep|run_slot|llama-bench|python3.*lm_eval"
+  552  pgrep -af "parallel|run_slot|llama-bench|python3.*lm_eval"
+  564  tmux new -s sweep_llama
+  568  LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 BENCH_THREADS=88     ./scripts/sweep.sh meta-llama/Llama-3.1-8B-Instruct       hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2       1     2>&1 | tee logs/sweep_llama_$(date +%Y%m%d_%H%M).lo
+  571  tmux kill-session -t  sweep_llama
+  574  tmux new -s sweep_llama
+  575  tmux kill-session -t sweep_llama 2>/dev/null
+  576  tmux new -s sweep_llama
+  577  tmux attach -s sweep_llama
+  578  tmux attach -t sweep_llama
+  582  tmux attach -t sweep_llama
+  584  tmux attach -t sweep_llama
+  586  tmux attach -t sweep_llama
+  588  tmux attach -t sweep_llama
+  590  tmux attach -t sweep_llama
+  593  tmux attach -t sweep_llama
+  598  tmux attach -t sweep_llama
+  600  pkill -9 -f "parallel.*sweep|run_slot|llama-bench|python3.*lm_eval"
+  611  pgrep -af "parallel|run_slot|llama-bench|python3.*lm_eval"
+  614  tmux kill-session -t sweep_mistral 2>/dev/null
+  615  tmux new -s sweep_mistral
+  617  tmux attach -t sweep_mistral
+  618  tmux attach -t sweep_mistral
+  620  tmux attach -t sweep_mistral
+  622  tmux attach -t sweep_mistral
+  624  tmux attach -t sweep_mistral
+  626  tmux attach -t sweep_mistral
+  670  tmux attach -t sweep_mistral
+  672  tmux attach -t sweep_mistral
+  676  tmux attach -t sweep_mistral
+  680  tmux attach -t sweep_mistral
+  682  tmux attach -t sweep_mistral
+  685  tmux attach -t sweep_mistral
+  687  tmux attach -t sweep_mistral
+  689  tmux attach -t sweep_mistral
+  692  tmux attach -t sweep_mistral
+  696  tmux attach -t sweep_mistral
+  698  tmux attach -t sweep_mistral
+  700  tmux attach -t sweep_mistral
+  702  tmux attach -t sweep_mistral
+  704  grep -n "n_ctx\|N_CTX" scripts/run_slot.sh scripts/40_lm_eval.sh
+  711  tmux attach -t sweep_mistral
+  713  tmux attach -t sweep_mistral
+  714  ps -ef | grep -E "sweep\.sh|run_slot\.sh" | grep -v grep
+  716  ps -ef | grep -E "sweep|run_slot|lm_eval|llama" | grep -v grep
+  717  tmux attach -t sweep_mistral
+  744  numactl --hardware
+  746  sudo apt-get update && sudo apt-get install -y numactl
+  747  which numactl
+  748  numactl --hardware | head -5
+  819  numactl --hardware
+  881  ps -ef | grep -E "sweep|run_slot|lm_eval|llama" | grep -v grep
+  890  LM_EVAL_N_THREADS=44 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 BENCH_THREADS=44   LM_EVAL_LIMIT=200   QUANTS_FILE=/tmp/quants_pilot.txt     ./scripts/sweep.sh meta-llama/Llama-3.1-8B-Instruct       hellaswag,truthfulqa_mc2       2     2>&1 | tee logs/pilot_par2_$(date +%Y%m%d_%H%M).log
+  897  export LM_EVAL_N_CTX=4096
+  900  LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 LM_EVAL_LIMIT=200   ./scripts/run_slot.sh     meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3     hellaswag,gsm8k,ifeval,truthfulqa_mc2   2>&1 | tee logs/smoke_$(date +%Y%m%d_%H%M).log
+  904  LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 LM_EVAL_LIMIT=200   ./scripts/run_slot.sh     meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3     hellaswag,gsm8k,ifeval,truthfulqa_mc2   2>&1 | tee logs/smoke_$(date +%Y%m%d_%H%M).log
+  926  LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 LM_EVAL_LIMIT=200     ./scripts/run_slot.sh meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3       hellaswag,gsm8k,ifeval,truthfulqa_mc2     2>&1 | tee logs/smoke_taskspecific_$(date +%Y%m%d_%H%M).log
+  929  LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 LM_EVAL_LIMIT=200     ./scripts/run_slot.sh meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3       hellaswag,gsm8k,ifeval,truthfulqa_mc2     2>&1 | tee logs/smoke_resume_$(date +%Y%m%d_%H%M).log
+  940  TOKENIZER_REPO=meta-llama/Llama-3.1-8B-Instruct   LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 LM_EVAL_LIMIT=200     ./scripts/40_lm_eval.sh       quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf       hellaswag,gsm8k,ifeval,truthfulqa_mc2       "$SLOT"     2>&1 | tee logs/ifeval_only_$(date +%Y%m%d_%H%M).log
+  947  LM_EVAL_N_THREADS=88 LM_EVAL_BATCH=1 LM_EVAL_N_CTX=2048 LM_EVAL_LIMIT=200     ./scripts/run_slot.sh meta-llama/Llama-3.1-8B-Instruct Q4_K_S 512 3       hellaswag,truthfulqa_mc2     2>&1 | tee logs/smoke_npointer_$(date +%Y%m%d_%H%M).log
+  949  KURT_GGUFS_DIR=$HOME/benchmark-ba/models/kurt_ggufs   QUANTS_FILE=/tmp/quants_kleinste_zuerst.txt   LM_EVAL_N_THREADS=96   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048   BENCH_THREADS=96   SKIP_CTX2048_PERF=1     ./scripts/sweep.sh meta-llama/Llama-3.1-8B-Instruct       hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2       1     2>&1 | tee logs/sweep_llama_$(date +%Y%m%d_%H%M).log
+  954  QUANTS_FILE=/tmp/quants_kleinste_zuerst.txt   LM_EVAL_N_THREADS=96   LM_EVAL_BATCH=1   LM_EVAL_N_CTX=2048   BENCH_THREADS=96   SKIP_CTX2048_PERF=1     ./scripts/sweep.sh mistralai/Mistral-7B-Instruct-v0.3       hellaswag,gsm8k,ifeval,truthfulqa_mc2       1     2>&1 | tee logs/sweep_mistral_$(date +%Y%m%d_%H%M).log
+ 1009  numactl --hardware
+ 1059  numactl --hardware > env/snapshot/numactl_hardware.txt
+ 1078  history | grep -E "sweep|run_slot|BENCH_THREADS|LM_EVAL_N_CTX|numactl|SKIP_CTX|QUANTS_FILE" > env/snapshot/relevant_shell_history.txt

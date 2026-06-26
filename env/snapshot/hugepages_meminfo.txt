@@ -1,0 +1,7 @@
+AnonHugePages:     88064 kB
+ShmemHugePages:        0 kB
+FileHugePages:  166135808 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
