@@ -1,0 +1,57 @@
+# Final thesis reproduction commands
+
+These commands summarize the final thesis configuration. Per-slot settings are recorded in each `slot.json` and in the corresponding lm-eval logs.
+
+## Mistral main sweep
+
+```bash
+QUANTS_FILE=configs/quants.txt \
+LM_EVAL_N_THREADS=96 \
+LM_EVAL_BATCH=1 \
+LM_EVAL_N_CTX=4096 \
+BENCH_THREADS=96 \
+BENCH_NUMA=distribute \
+SKIP_CTX2048_PERF=1 \
+numactl --interleave=all \
+./scripts/sweep.sh mistralai/Mistral-7B-Instruct-v0.3 \
+  hellaswag,gsm8k,ifeval,truthfulqa_mc2 \
+  1
+```
+
+## Llama Q4_K_S diagnostic comparison
+
+This is a diagnostic comparison against Kurt (2026), not a successful quantitative replication. GSM8K and HellaSwag fall outside the 2-SE comparison band; TruthfulQA-MC2 and the prompt-level IFEval components fall within it. The slot is retained to document this comparison and the context-window history of the run.
+
+```bash
+KURT_GGUFS_DIR=/path/to/kurt_ggufs \
+LM_EVAL_N_THREADS=96 \
+LM_EVAL_BATCH=1 \
+LM_EVAL_N_CTX=4096 \
+BENCH_THREADS=96 \
+numactl --interleave=all \
+./scripts/run_slot.sh meta-llama/Llama-3.1-8B-Instruct \
+  Q4_K_S \
+  512 \
+  3 \
+  hellaswag,gsm8k,ifeval,truthfulqa_mc2
+```
+
+The stored slot contains an aggregated Llama `results.json` at `results/2026-06-16T18-01-37Z-meta-llama_llama-3.1-8b-instruct-q4_k_s-ctx512/results.json`. It was generated from the final artefacts with the recorded environment hash:
+
+```bash
+EXPECTED_ENV_HASH=6dbc1e564b6dccb9734fcde74362ec32a95b93809cf7a064c3afc6a3bed883b3 \
+python3 scripts/50_aggregate.py \
+  results/2026-06-16T18-01-37Z-meta-llama_llama-3.1-8b-instruct-q4_k_s-ctx512
+```
+
+## Bootstrap confidence intervals
+
+```bash
+python3 scripts/60_bootstrap.py \
+  --baseline-slot results/2026-06-17T13-33-45Z-mistralai_mistral-7b-instruct-v0.3-f16-ctx512 \
+  --quant-glob 'results/*-mistralai_mistral-7b-instruct-v0.3-*-ctx512' \
+  --tasks hellaswag,gsm8k,ifeval,truthfulqa_mc2 \
+  --b 10000 \
+  --seed 0xBACE10AD \
+  --out-dir results/bootstrap
+```

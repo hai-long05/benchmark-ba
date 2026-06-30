@@ -1,2 +1,0 @@
-ERROR: tasks request apply_chat_template:true but TOKENIZER_REPO is not set
-  Set TOKENIZER_REPO=<hf-id> (e.g. meta-llama/Llama-3.1-8B-Instruct)

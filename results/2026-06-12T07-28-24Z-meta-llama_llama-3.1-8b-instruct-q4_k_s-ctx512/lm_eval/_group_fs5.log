@@ -1,25 +1,0 @@
-2026-06-12:09:38:02 WARNING  [__main__:369]  --limit SHOULD ONLY BE USED FOR TESTING.REAL METRICS SHOULD NOT BE COMPUTED USING LIMIT.
-2026-06-12:09:38:02 INFO     [__main__:465] Selected Tasks: ['gsm8k']
-2026-06-12:09:38:02 WARNING  [evaluator:172] pretrained=pretrained=/Users/I589258/Documents/benchmark/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf,n_ctx=2048,verbose=False
-        appears to be an instruct or chat variant but chat template is not applied. Recommend setting `apply_chat_template` (optionally
-        `fewshot_as_multiturn`).
-2026-06-12:09:38:02 INFO     [evaluator:202] Setting random seed to 0 | Setting numpy seed to 1234 | Setting torch manual seed to 1234 | Setting fewshot manual seed to 1234
-2026-06-12:09:38:02 INFO     [evaluator:240] Initializing gguf_local model, with arguments: {'pretrained':
-        '/Users/I589258/Documents/benchmark/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf', 'n_ctx': 2048, 'verbose': False}
-llama_context: n_ctx_seq (2048) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
-2026-06-12:09:38:19 INFO     [tasks:695] Selected tasks:
-2026-06-12:09:38:19 INFO     [tasks:686] Task: gsm8k (gsm8k/gsm8k.yaml)
-2026-06-12:09:38:19 INFO     [evaluator:305] gsm8k: Using gen_kwargs: {'until': ['Question:', '</s>', '<|im_end|>'], 'do_sample': False, 'temperature': 0.0}
-2026-06-12:09:38:19 WARNING  [evaluator:324] Overwriting default num_fewshot of gsm8k from 5 to 5
-2026-06-12:09:38:19 INFO     [api.task:434] Building contexts for gsm8k on rank 0...
-  0%|          | 0/20 [00:00<?, ?it/s]100%|██████████| 20/20 [00:00<00:00, 576.55it/s]
-2026-06-12:09:38:19 INFO     [evaluator:574] Running generate_until requests
-generate_until (gguf_local):   0%|          | 0/20 [00:00<?, ?it/s]generate_until (gguf_local):   5%|▌         | 1/20 [00:27<08:48, 27.84s/it]generate_until (gguf_local):  10%|█         | 2/20 [00:52<07:44, 25.81s/it]generate_until (gguf_local):  15%|█▌        | 3/20 [01:28<08:38, 30.47s/it]generate_until (gguf_local):  20%|██        | 4/20 [01:49<07:09, 26.82s/it]generate_until (gguf_local):  25%|██▌       | 5/20 [02:19<06:56, 27.80s/it]generate_until (gguf_local):  30%|███       | 6/20 [02:49<06:42, 28.76s/it]generate_until (gguf_local):  35%|███▌      | 7/20 [03:27<06:51, 31.63s/it]generate_until (gguf_local):  40%|████      | 8/20 [04:17<07:32, 37.74s/it]generate_until (gguf_local):  45%|████▌     | 9/20 [05:21<08:22, 45.73s/it]generate_until (gguf_local):  50%|█████     | 10/20 [06:05<07:32, 45.23s/it]generate_until (gguf_local):  55%|█████▌    | 11/20 [06:39<06:15, 41.71s/it]generate_until (gguf_local):  60%|██████    | 12/20 [07:27<05:50, 43.86s/it]generate_until (gguf_local):  65%|██████▌   | 13/20 [08:18<05:20, 45.79s/it]generate_until (gguf_local):  70%|███████   | 14/20 [08:54<04:17, 42.98s/it]generate_until (gguf_local):  75%|███████▌  | 15/20 [09:21<03:10, 38.11s/it]generate_until (gguf_local):  80%|████████  | 16/20 [09:52<02:24, 36.10s/it]generate_until (gguf_local):  85%|████████▌ | 17/20 [10:34<01:52, 37.63s/it]generate_until (gguf_local):  90%|█████████ | 18/20 [11:13<01:16, 38.24s/it]generate_until (gguf_local):  95%|█████████▌| 19/20 [11:48<00:37, 37.17s/it]generate_until (gguf_local): 100%|██████████| 20/20 [12:33<00:00, 39.56s/it]generate_until (gguf_local): 100%|██████████| 20/20 [12:33<00:00, 37.68s/it]
-2026-06-12:09:50:55 INFO     [loggers.evaluation_tracker:209] Saving results aggregated
-2026-06-12:09:50:55 INFO     [loggers.evaluation_tracker:298] Saving per-sample results for: gsm8k
-gguf_local (pretrained=/Users/I589258/Documents/benchmark/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf,n_ctx=2048,verbose=False), gen_kwargs: (None), limit: 20.0, num_fewshot: 5, batch_size: 1
-|Tasks|Version|     Filter     |n-shot|  Metric   |   |Value|   |Stderr|
-|-----|------:|----------------|-----:|-----------|---|----:|---|-----:|
-|gsm8k|      3|flexible-extract|     5|exact_match|↑  |  0.7|±  |0.1051|
-|     |       |strict-match    |     5|exact_match|↑  |  0.7|±  |0.1051|
-

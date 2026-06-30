@@ -1,0 +1,62 @@
+{
+  "run_id": "2026-06-16T18-01-37Z-meta-llama_llama-3.1-8b-instruct-q4_k_s-ctx512",
+  "model": "Llama-3.1-8B-Instruct",
+  "quant": "Q4_K_S",
+  "bits_nominal": 4,
+  "ctx": 512,
+  "size_mib": 4475.28,
+  "size_reduction_pct": 70.8,
+  "quant_time_s": 0,
+  "pp": {
+    "ctx": 512,
+    "median": 243.397573,
+    "iqr": 1.5805124999999975,
+    "samples": [
+      243.397573,
+      243.094997,
+      246.256022
+    ]
+  },
+  "tg": {
+    "median": 30.135152,
+    "iqr": 0.835761999999999,
+    "samples": [
+      29.181742,
+      30.135152,
+      30.853266
+    ]
+  },
+  "tasks": {
+    "gsm8k": {
+      "exact_match_strict_match": 0.7391963608794542,
+      "exact_match_stderr_strict_match": 0.012094252417332725,
+      "exact_match_flexible_extract": 0.8286580742987112,
+      "exact_match_stderr_flexible_extract": 0.010379150273178359
+    },
+    "hellaswag": {
+      "acc": 0.5911173073093009,
+      "acc_stderr": 0.004906227902850411,
+      "acc_norm": 0.7869946225851424,
+      "acc_norm_stderr": 0.004085946564442383
+    },
+    "ifeval": {
+      "prompt_level_strict_acc": 0.7597042513863216,
+      "prompt_level_strict_acc_stderr": 0.018386473581487088,
+      "inst_level_strict_acc": 0.8225419664268585,
+      "prompt_level_loose_acc": 0.8022181146025879,
+      "prompt_level_loose_acc_stderr": 0.017141254719084894,
+      "inst_level_loose_acc": 0.8573141486810552
+    },
+    "truthfulqa_mc2": {
+      "acc": 0.5172251079819425,
+      "acc_stderr": 0.014941293462635211
+    }
+  },
+  "ppl_wikitext2": null,
+  "env": {
+    "host_id": "6dbc1e564b6dccb9734fcde74362ec32a95b93809cf7a064c3afc6a3bed883b3",
+    "llama_cpp_commit": "be47fb9285779e900915bd8246eb9664110d4ba5",
+    "lm_eval_version": "0.4.9.2"
+  },
+  "warnings": []
+}

@@ -3,13 +3,13 @@
 #
 # Usage: sweep.sh <hf-id> [<tasks-csv>] [<jobs>]
 #   hf-id     - Hugging Face model id (e.g. meta-llama/Llama-3.1-8B-Instruct)
-#   tasks-csv - comma-separated task keys (default: all six per Kurt)
+#   tasks-csv - comma-separated task keys (default: final thesis task set)
 #   jobs      - parallel slot count (default: 1; on c3-standard-176 use 8)
 #
 # Behaviour:
-#   1. Fetches model + quantizes all 14 configs once (sequential, deps-aware).
-#   2. Runs 14 accuracy slots at ctx=512 (parallel via GNU parallel if jobs>1).
-#   3. Runs 14 perf-only slots at ctx=2048 (parallel).
+#   1. Fetches model + quantizes all configured schemes once (sequential, deps-aware).
+#   2. Runs accuracy + ctx=512 performance slots (parallel via GNU parallel if jobs>1).
+#   3. Optionally runs perf-only slots at ctx=2048 (parallel).
 #
 # Env vars (forwarded to run_slot.sh):
 #   LM_EVAL_LIMIT, LM_EVAL_N_CTX, LM_EVAL_BATCH, LM_EVAL_N_THREADS, LLAMA_CPP_DIR,
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 HF_ID="${1:?Usage: $0 <hf-id> [<tasks-csv>] [<jobs>]}"
-TASKS_CSV="${2:-hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2,wikitext}"
+TASKS_CSV="${2:-hellaswag,gsm8k,ifeval,truthfulqa_mc2}"
 JOBS="${3:-1}"
 QUANTS_FILE="${QUANTS_FILE:-configs/quants.txt}"
 
@@ -26,10 +26,11 @@ QUANTS_FILE="${QUANTS_FILE:-configs/quants.txt}"
 mapfile -t SCHEMES < <(grep -v '^$' "$QUANTS_FILE")
 echo "==> sweep: model=$HF_ID, ${#SCHEMES[@]} configs, tasks=$TASKS_CSV, jobs=$JOBS"
 
-# 1. Sequential warm-up: fetch model + quantize each scheme once. Doing this in
-#    one process avoids 14 parallel HF downloads (they would all clobber the
-#    same models/_hf/<...>/ dir) and 14 parallel llama-quantize runs (which
-#    would peg disk I/O without speedup since llama-quantize is single-threaded).
+# 1. Sequential warm-up: fetch model + quantize each configured scheme once.
+#    Doing this in one process avoids parallel HF downloads (they would all
+#    clobber the same models/_hf/<...>/ dir) and parallel llama-quantize runs
+#    (which would peg disk I/O without speedup since llama-quantize is
+#    single-threaded).
 echo "==> warm-up: fetch + quantize"
 ./scripts/10_fetch_model.sh "$HF_ID"
 SAFE=$(echo "$HF_ID" | tr '/' '_' | tr -d "'\"" | tr '[:upper:]' '[:lower:]')
@@ -66,9 +67,8 @@ else
 fi
 
 # 3. Performance-only at ctx=2048 (skip lm_eval — accuracy is ctx-independent).
-# Set SKIP_CTX2048_PERF=1 to skip this phase entirely (e.g. when SF3 / H3
-# context-length-scaling is dropped from the thesis scope and only Kurt's
-# default ctx=512 perf is reported).
+# Set SKIP_CTX2048_PERF=1 to skip this phase entirely; the final thesis reports
+# ctx=512 performance for the main sweep.
 if [ "${SKIP_CTX2048_PERF:-0}" = "1" ]; then
   echo "==> SKIP_CTX2048_PERF=1 — skipping ctx=2048 perf-only phase"
 elif command -v parallel >/dev/null 2>&1 && [ "$JOBS" -gt 1 ]; then

@@ -1,30 +1,0 @@
-==> fetch model
-model already present and verified: models/meta-llama_llama-3.1-8b-instruct-fp16.gguf
-==> quantize
-quantized already present and verified: quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf
-wrote results/2026-06-13T16-18-21Z-meta-llama_llama-3.1-8b-instruct-q4_k_s-ctx512/slot.json
-==> bench
-bench: pp=196.218427 tok/s, tg=37.131016 tok/s, 2 warnings
-==> lm_eval (tasks: hellaswag,gsm8k,ifeval,truthfulqa_mc2)
-==> lm_eval (n_fewshot=0, chat_template=0, tasks: hellaswag,truthfulqa_mc2)
-2026-06-13:16:18:58 WARNING  [__main__:369]  --limit SHOULD ONLY BE USED FOR TESTING.REAL METRICS SHOULD NOT BE COMPUTED USING LIMIT.
-2026-06-13:16:18:58 INFO     [__main__:465] Selected Tasks: ['hellaswag', 'truthfulqa_mc2']
-2026-06-13:16:18:58 WARNING  [evaluator:172] pretrained=pretrained=/home/hai.long.do/benchmark-ba/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf,n_ctx=2048,verbose=False,n_threads=88
-        appears to be an instruct or chat variant but chat template is not applied. Recommend setting `apply_chat_template` (optionally
-        `fewshot_as_multiturn`).
-2026-06-13:16:18:58 INFO     [evaluator:202] Setting random seed to 0 | Setting numpy seed to 1234 | Setting torch manual seed to 1234 | Setting fewshot manual seed to 1234
-2026-06-13:16:18:58 INFO     [evaluator:240] Initializing gguf_local model, with arguments: {'pretrained':
-        '/home/hai.long.do/benchmark-ba/quantized/meta-llama_llama-3.1-8b-instruct-q4_k_s.gguf', 'n_ctx': 2048, 'verbose': False,
-        'n_threads': 88}
-llama_context: n_ctx_seq (2048) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
-2026-06-13:16:19:05 INFO     [tasks:695] Selected tasks:
-2026-06-13:16:19:05 INFO     [tasks:686] Task: truthfulqa_mc2 (truthfulqa/truthfulqa_mc2.yaml)
-2026-06-13:16:19:05 INFO     [tasks:686] Task: hellaswag (hellaswag/hellaswag.yaml)
-2026-06-13:16:19:05 INFO     [evaluator:320] num_fewshot has been set to 0 for truthfulqa_mc2 in its config. Manual configuration will be ignored.
-2026-06-13:16:19:05 WARNING  [evaluator:324] Overwriting default num_fewshot of hellaswag from None to 0
-2026-06-13:16:19:05 INFO     [api.task:434] Building contexts for truthfulqa_mc2 on rank 0...
-  0%|          | 0/200 [00:00<?, ?it/s] 70%|███████   | 140/200 [00:00<00:00, 1395.43it/s]100%|██████████| 200/200 [00:00<00:00, 1397.52it/s]
-2026-06-13:16:19:06 INFO     [api.task:434] Building contexts for hellaswag on rank 0...
-  0%|          | 0/200 [00:00<?, ?it/s]100%|██████████| 200/200 [00:00<00:00, 5299.02it/s]
-2026-06-13:16:19:06 INFO     [evaluator:574] Running loglikelihood requests
-loglikelihood (gguf_local, cached):   0%|          | 0/2276 [00:00<?, ?it/s]loglikelihood (gguf_local, cached):   0%|          | 5/2276 [00:45<5:41:45,  9.03s/it]loglikelihood (gguf_local, cached):   1%|          | 13/2276 [01:49<5:13:55,  8.32s/it]loglikelihood (gguf_local, cached):   1%|          | 19/2276 [02:36<5:06:05,  8.14s/it]loglikelihood (gguf_local, cached):   1%|          | 25/2276 [02:39<3:15:26,  5.21s/it]loglikelihood (gguf_local, cached):   1%|▏         | 34/2276 [02:42<1:54:12,  3.06s/it]loglikelihood (gguf_local, cached):   2%|▏         | 42/2276 [02:46<1:18:17,  2.10s/it]loglikelihood (gguf_local, cached):   2%|▏         | 47/2276 [02:48<1:03:01,  1.70s/it]loglikelihood (gguf_local, cached):   3%|▎         | 60/2276 [02:52<38:45,  1.05s/it]  loglikelihood (gguf_local, cached):   3%|▎         | 73/2276 [02:57<28:12,  1.30it/s]loglikelihood (gguf_local, cached):   4%|▎         | 81/2276 [03:00<24:17,  1.51it/s]loglikelihood (gguf_local, cached):   4%|▍         | 88/2276 [03:03<21:47,  1.67it/s]loglikelihood (gguf_local, cached):   4%|▍         | 93/2276 [03:05<20:41,  1.76it/s]loglikelihood (gguf_local, cached):   4%|▍         | 98/2276 [03:08<21:39,  1.68it/s]loglikelihood (gguf_local, cached):   5%|▍         | 103/2276 [03:11<20:29,  1.77it/s]loglikelihood (gguf_local, cached):   5%|▍         | 111/2276 [03:14<18:01,  2.00it/s]

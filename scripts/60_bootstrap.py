@@ -8,12 +8,12 @@ the same task), compute the Quant-vs-FP16 difference per resample, report
 percentile-CI from the resample distribution.
 
 Methodology contract:
-- B = 1000 default, --b 10000 for critical (CI marginal to zero).
+- The final thesis tables use B = 10000.
 - Percentile CI: empirical 2.5/97.5 quantiles of Δ_b distribution.
-- IFEval: prompt-level resampling. Per resample b, ALL four sub-metrics
-  (inst_level_loose, inst_level_strict, prompt_level_loose, prompt_level_strict)
-  are computed on the SAME drawn prompt-sample, then averaged to a per-resample
-  scalar. Preserves the correlation structure between sub-metrics.
+- IFEval: prompt-level resampling. Per resample b, all four sub-metrics are
+  recomputed according to the thesis composite: prompt-level strict/loose as
+  prompt means, instruction-level strict/loose as fulfilled instructions divided
+  by total instructions, then the arithmetic mean of these four values.
 - WikiText: corpus-aggregated, exempted from item-bootstrap.
 - Pairing: identical doc_id between Quant and FP16 within a resample.
 - Random seed: --seed (default 0xBACE10AD); printed in output JSON.
@@ -189,6 +189,106 @@ def _build_pair(baseline_items: list[dict], quant_items: list[dict],
     return base_mat, quant_mat, common_keys
 
 
+def _pair_items(baseline_items: list[dict], quant_items: list[dict]) -> tuple[list[dict], list[dict], list[str]]:
+    """Pair baseline and quant sample dictionaries by _pair_key."""
+    base_by_key = {it["_pair_key"]: it for it in baseline_items}
+    quant_by_key = {it["_pair_key"]: it for it in quant_items}
+    common_keys = sorted(set(base_by_key.keys()) & set(quant_by_key.keys()))
+    only_base = len(base_by_key) - len(common_keys)
+    only_quant = len(quant_by_key) - len(common_keys)
+    if only_base or only_quant:
+        print(
+            f"  WARN: dropped unpaired items — only_baseline={only_base}, "
+            f"only_quant={only_quant}, paired={len(common_keys)}",
+            file=sys.stderr,
+        )
+    if not common_keys:
+        raise RuntimeError("no paired items between baseline and quant slots")
+    return [base_by_key[k] for k in common_keys], [quant_by_key[k] for k in common_keys], common_keys
+
+
+def _ifeval_arrays(items: list[dict]) -> dict[str, np.ndarray]:
+    """Extract IFEval prompt-level and instruction-level components.
+
+    IFEval's prompt-level metrics are one boolean per prompt. Instruction-level
+    metrics are lists of booleans, one per instruction in the prompt. The thesis
+    composite follows the harness aggregates: mean prompt-level strict/loose,
+    plus total fulfilled instructions divided by total instructions for strict
+    and loose, then the arithmetic mean of these four sub-metrics.
+    """
+
+    def scalar(item: dict, key: str) -> float:
+        value = item.get(key)
+        if value is None:
+            raise KeyError(f"metric {key!r} missing in sample doc_id={item.get('_pair_key')}")
+        return float(value)
+
+    def instruction_counts(item: dict, key: str) -> tuple[float, float]:
+        value = item.get(key)
+        if value is None:
+            raise KeyError(f"metric {key!r} missing in sample doc_id={item.get('_pair_key')}")
+        if isinstance(value, list):
+            return float(np.sum([float(v) for v in value])), float(len(value))
+        return float(value), 1.0
+
+    strict_counts = [instruction_counts(item, "inst_level_strict_acc") for item in items]
+    loose_counts = [instruction_counts(item, "inst_level_loose_acc") for item in items]
+    return {
+        "prompt_strict": np.array([scalar(item, "prompt_level_strict_acc") for item in items]),
+        "prompt_loose": np.array([scalar(item, "prompt_level_loose_acc") for item in items]),
+        "inst_strict_num": np.array([num for num, _den in strict_counts]),
+        "inst_strict_den": np.array([den for _num, den in strict_counts]),
+        "inst_loose_num": np.array([num for num, _den in loose_counts]),
+        "inst_loose_den": np.array([den for _num, den in loose_counts]),
+    }
+
+
+def _ifeval_composite(arrays: dict[str, np.ndarray]) -> float:
+    prompt_strict = float(arrays["prompt_strict"].mean())
+    prompt_loose = float(arrays["prompt_loose"].mean())
+    inst_strict = float(arrays["inst_strict_num"].sum() / arrays["inst_strict_den"].sum())
+    inst_loose = float(arrays["inst_loose_num"].sum() / arrays["inst_loose_den"].sum())
+    return (prompt_strict + prompt_loose + inst_strict + inst_loose) / 4.0
+
+
+def bootstrap_ifeval_paired(
+    baseline_items: list[dict],
+    quant_items: list[dict],
+    *,
+    b: int,
+    rng: np.random.Generator,
+) -> dict[str, float]:
+    """Paired prompt-level bootstrap for the thesis IFEval composite."""
+    paired_base, paired_quant, _keys = _pair_items(baseline_items, quant_items)
+    base = _ifeval_arrays(paired_base)
+    quant = _ifeval_arrays(paired_quant)
+    n = len(paired_base)
+    idx = rng.integers(0, n, size=(b, n))
+
+    def resampled_composite(arrays: dict[str, np.ndarray]) -> np.ndarray:
+        prompt_strict = arrays["prompt_strict"][idx].mean(axis=1)
+        prompt_loose = arrays["prompt_loose"][idx].mean(axis=1)
+        inst_strict = arrays["inst_strict_num"][idx].sum(axis=1) / arrays["inst_strict_den"][idx].sum(axis=1)
+        inst_loose = arrays["inst_loose_num"][idx].sum(axis=1) / arrays["inst_loose_den"][idx].sum(axis=1)
+        return (prompt_strict + prompt_loose + inst_strict + inst_loose) / 4.0
+
+    base_means = resampled_composite(base)
+    quant_means = resampled_composite(quant)
+    deltas = quant_means - base_means
+    ci_low, ci_high = np.percentile(deltas, [2.5, 97.5])
+    point_fp16 = _ifeval_composite(base)
+    point_quant = _ifeval_composite(quant)
+    return {
+        "point_fp16": float(point_fp16),
+        "point_quant": float(point_quant),
+        "delta": float(point_quant - point_fp16),
+        "ci_low": float(ci_low),
+        "ci_high": float(ci_high),
+        "n_items": int(n),
+        "b": int(b),
+    }
+
+
 def bootstrap_paired(
     baseline_mat: np.ndarray,
     quant_mat: np.ndarray,
@@ -254,12 +354,21 @@ def run_one_task(
             "reason": "corpus-aggregated; item-bootstrap not semantically valid",
         }
 
+    base_items = _load_items(baseline_slot, task_key)
+    quant_items = _load_items(quant_slot, task_key)
+
+    if task_key == "ifeval":
+        res = bootstrap_ifeval_paired(base_items, quant_items, b=b, rng=rng)
+        res["task"] = task_key
+        res["task_kind"] = "ifeval"
+        res["metric_keys"] = TASK_METRIC_KEYS[task_key]
+        res["contains_zero"] = bool(res["ci_low"] <= 0 <= res["ci_high"])
+        return res
+
     metric_keys = TASK_METRIC_KEYS.get(task_key)
     if metric_keys is None:
         raise ValueError(f"unknown task_key: {task_key!r}")
 
-    base_items = _load_items(baseline_slot, task_key)
-    quant_items = _load_items(quant_slot, task_key)
     base_mat, quant_mat, _keys = _build_pair(base_items, quant_items, metric_keys)
 
     average_metrics = task_key in PROMPT_LEVEL_TASKS  # IFEval
@@ -295,7 +404,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--tasks", default="hellaswag,gsm8k,ifeval,mmlu,truthfulqa_mc2",
                    help="comma-separated task keys (wikitext is auto-skipped)")
     p.add_argument("--b", type=int, default=1000,
-                   help="bootstrap resamples (default 1000; methodology promises 10000 for critical CIs)")
+                   help="bootstrap resamples (final thesis tables use 10000)")
     p.add_argument("--seed", type=lambda s: int(s, 0), default=0xBACE10AD,
                    help="random seed (default 0xBACE10AD)")
     p.add_argument("--out", type=Path, help="output JSON path (single quant slot)")
@@ -368,7 +477,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  → {outpath}")
 
     print("\nLegend: '*' = 95% CI excludes zero (significant difference vs FP16).")
-    print("        For critical decisions where CI is marginal, re-run with --b 10000.")
+    print("        Final thesis tables use --b 10000.")
     return 0
 
 
